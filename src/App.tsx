@@ -10,29 +10,37 @@ import type {
 import { LAYER_CATALOG } from './data/layerCatalog';
 import { MARS_SITES } from './data/marsSites';
 import { calculateMarsDistanceKm, estimateRoverSolTransit } from './utils/marsMath';
+import { useAppRouter } from './router/useAppRouter';
 
 import { GeoMarsHeader } from './components/GeoMarsHeader';
 import { MapLayersSidebar } from './components/MapLayersSidebar';
 import { LocationDetailsPanel } from './components/LocationDetailsPanel';
 import { MarsOverviewPanel } from './components/MarsOverviewPanel';
-import { PopularLocationsPanel } from './components/PopularLocationsPanel';
 import { ElevationProfilePanel } from './components/ElevationProfilePanel';
+import { MissionActivityPanel } from './components/MissionActivityPanel';
 import { MarsMap } from './components/MarsMap';
 import { MarsGlobe } from './components/MarsGlobe';
 
+import { HomeView } from './components/HomeView';
 import { TerrainView } from './components/TerrainView';
-import { MissionsView } from './components/MissionsView';
 import { ScienceView } from './components/ScienceView';
+import { RoutePlannerView } from './components/RoutePlannerView';
+import { AboutView } from './components/AboutView';
+import { MissionReportModal } from './components/MissionReportModal';
 import { Info } from 'lucide-react';
 
 export default function App() {
-  // Navigation & View state
-  const [activeTab, setActiveTab] = useState<TabType>('map');
+  const { currentPath, navigate } = useAppRouter();
+
+  // Active layer & view mode
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
   const [activeLayer, setActiveLayer] = useState<MapLayerConfig>(LAYER_CATALOG[0]);
   const [layerOpacity, setLayerOpacity] = useState<number>(86);
 
-  // Overlays Configuration (matching reference design)
+  // Modals state (Mission Dossier)
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+
+  // Overlays Configuration
   const [overlays, setOverlays] = useState<MapOverlaysConfig>({
     roverLandingSites: true,
     missionLocations: true,
@@ -76,6 +84,44 @@ export default function App() {
     status: 'Verified'
   });
 
+  // Derive activeTab from currentPath
+  const activeTab: TabType = 
+    currentPath === '/' ? 'home' :
+    currentPath === '/explore' ? 'map' :
+    currentPath === '/route-planner' ? 'route' :
+    currentPath === '/terrain-lab' ? 'terrain' :
+    currentPath === '/mission-data' ? 'science' :
+    currentPath === '/about' ? 'about' : 'map';
+
+  // Handler: Top Navigation Tab Change
+  const handleTabChange = (tab: TabType) => {
+    switch (tab) {
+      case 'home':
+        navigate('/');
+        break;
+      case 'map':
+        navigate('/explore');
+        break;
+      case 'route':
+        setOverlays((prev) => ({ ...prev, plannedRoute: true }));
+        navigate('/route-planner');
+        break;
+      case 'terrain':
+        navigate('/terrain-lab');
+        break;
+      case 'science':
+      case 'discover':
+      case 'missions':
+        navigate('/mission-data');
+        break;
+      case 'about':
+        navigate('/about');
+        break;
+      default:
+        navigate('/explore');
+    }
+  };
+
   // Handler: Select site from search, popular cards, or map markers
   const handleSelectSite = (site: MarsSite | null) => {
     setSelectedSite(site);
@@ -89,10 +135,16 @@ export default function App() {
     }
   };
 
-  // Handler: Select site from full-screen tabs and return to map
+  // Handler: Select site from anywhere and go to map
   const handleSelectSiteAndGoToMap = (site: MarsSite) => {
     handleSelectSite(site);
-    setActiveTab('map');
+    navigate('/explore');
+  };
+
+  // Handler: Select layer from anywhere and go to map
+  const handleSelectLayerAndGoToMap = (layer: MapLayerConfig) => {
+    setActiveLayer(layer);
+    navigate('/explore');
   };
 
   // Handler: Toggle individual overlay switch
@@ -119,31 +171,41 @@ export default function App() {
   const handleViewIn3DTerrain = (site: MarsSite) => {
     handleSelectSite(site);
     setViewMode('3d');
-    if (activeTab !== 'map') {
-      setActiveTab('map');
-    }
+    navigate('/explore');
   };
 
-  // Handler: Top Navigation Tab Change
-  const handleTabChange = (tab: TabType) => {
-    setActiveTab(tab);
-    if (tab === 'route') {
-      setOverlays((prev) => ({ ...prev, plannedRoute: true }));
-    }
+  // Handler: "Analyze Terrain" button from Location Intelligence panel
+  const handleAnalyzeTerrain = (site: MarsSite) => {
+    setSelectedSite(site);
+    navigate('/terrain-lab');
+  };
+
+  // Handler: "Plan Route" button from Location Intelligence panel
+  const handlePlanRoute = (site: MarsSite) => {
+    setSelectedSite(site);
+    setOverlays((prev) => ({ ...prev, plannedRoute: true }));
+    navigate('/route-planner');
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#020A10] text-[#F4F7FA]">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#080B12] text-[#F5F7FA]">
       {/* 1. TOP NAVIGATION BAR */}
       <GeoMarsHeader
         activeTab={activeTab}
         onTabChange={handleTabChange}
         onSelectSite={handleSelectSiteAndGoToMap}
+        onOpenReportModal={() => setIsReportModalOpen(true)}
       />
 
       {/* 2. MAIN WORKSPACE AREA */}
       <div className="flex-1 flex overflow-hidden relative">
-        {activeTab === 'map' || activeTab === 'route' ? (
+        {currentPath === '/' ? (
+          <HomeView
+            onNavigate={navigate}
+            onSelectSiteAndGoToMap={handleSelectSiteAndGoToMap}
+            onSelectLayerAndGoToMap={handleSelectLayerAndGoToMap}
+          />
+        ) : currentPath === '/explore' ? (
           <div className="flex-1 flex overflow-hidden p-3 gap-3">
             {/* LEFT SIDEBAR: MAP LAYERS (280px) */}
             <div className="w-[280px] min-w-[280px] shrink-0 h-full">
@@ -158,10 +220,10 @@ export default function App() {
               />
             </div>
 
-            {/* CENTER REGION: CENTRAL MAP + 3 BOTTOM PANELS */}
+            {/* CENTER REGION: CENTRAL MAP + 3 BOTTOM DOCK PANELS */}
             <div className="flex-1 flex flex-col gap-3 min-w-0 h-full">
               {/* Central Mars Map Viewport */}
-              <div className="flex-1 min-h-0 bg-[#04121B] border border-[#19303E] rounded-xl overflow-hidden relative shadow-2xl">
+              <div className="flex-1 min-h-0 bg-[#111824] border border-[#273244] rounded-xl overflow-hidden relative shadow-2xl">
                 {viewMode === '2d' ? (
                   <MarsMap
                     activeLayer={activeLayer}
@@ -198,70 +260,104 @@ export default function App() {
                   />
                 )}
 
-                {/* Reopen Location Details Button when panel is collapsed */}
+                {/* Reopen Location Intelligence Button when panel is collapsed */}
                 {!isLocationDetailsOpen && (
                   <button
                     onClick={() => setIsLocationDetailsOpen(true)}
-                    className="absolute top-4 right-44 z-20 px-3 py-1.5 bg-[#04121B]/90 hover:bg-[#081925] border border-[#19303E] hover:border-[#FF6B35] rounded-xl text-xs font-semibold text-[#F4F7FA] shadow-2xl flex items-center gap-2 backdrop-blur-md transition-all cursor-pointer"
-                    title="Open Location Details"
+                    className="absolute top-4 right-44 z-20 px-3 py-1.5 bg-[#111824]/90 hover:bg-[#0D121C] border border-[#273244] hover:border-[#FF6B35] rounded-xl text-xs font-semibold text-[#F5F7FA] shadow-2xl flex items-center gap-2 backdrop-blur-md transition-all cursor-pointer"
+                    title="Open Location Intelligence"
                   >
                     <Info className="w-3.5 h-3.5 text-[#FF6B35]" />
-                    <span>Location Details</span>
+                    <span>Location Intelligence</span>
                   </button>
                 )}
               </div>
 
-              {/* Bottom 3 Panels Row (~195px height) */}
-              <div className="h-[195px] shrink-0 flex gap-3">
-                {/* 1. Mars Overview Panel */}
-                <div className="w-[270px] min-w-[270px] shrink-0 h-full">
-                  <MarsOverviewPanel />
-                </div>
-
-                {/* 2. Popular Locations Panel */}
-                <div className="flex-1 min-w-0 h-full">
-                  <PopularLocationsPanel
+              {/* Bottom Information Dock (3 Cards Horizontally Arranged) */}
+              <div className="h-[188px] shrink-0 grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Card 1 — Mars Overview */}
+                <div className="min-w-0 h-full">
+                  <MarsOverviewPanel
                     selectedSite={selectedSite}
-                    onSelectSite={handleSelectSite}
-                    onViewAll={() => setActiveTab('terrain')}
+                    activeLayer={activeLayer}
+                    selectedCoordinate={selectedCoordinate}
                   />
                 </div>
 
-                {/* 3. Elevation Profile Panel */}
-                <div className="w-[350px] min-w-[350px] shrink-0 h-full">
+                {/* Card 2 — Elevation Profile */}
+                <div className="min-w-0 h-full">
                   <ElevationProfilePanel
                     selectedSite={selectedSite}
                     onSelectSite={handleSelectSite}
+                    missionRoute={missionRoute}
+                    isRouteActive={overlays.plannedRoute}
+                  />
+                </div>
+
+                {/* Card 3 — Mission Activity */}
+                <div className="min-w-0 h-full">
+                  <MissionActivityPanel
+                    selectedSite={selectedSite}
+                    onExploreMissions={() => navigate('/mission-data')}
                   />
                 </div>
               </div>
             </div>
 
-            {/* RIGHT SIDEBAR: LOCATION DETAILS (350px) */}
+            {/* RIGHT SIDEBAR: LOCATION INTELLIGENCE (350px) */}
             {isLocationDetailsOpen && (
               <div className="w-[350px] min-w-[350px] shrink-0 h-full transition-all duration-300">
                 <LocationDetailsPanel
                   selectedSite={selectedSite}
                   onClose={() => setIsLocationDetailsOpen(false)}
                   onViewIn3DTerrain={handleViewIn3DTerrain}
+                  onAnalyzeTerrain={handleAnalyzeTerrain}
+                  onPlanRoute={handlePlanRoute}
                 />
               </div>
             )}
           </div>
-        ) : activeTab === 'terrain' ? (
-          <div className="flex-1 h-full overflow-hidden bg-[#020A10]">
+        ) : currentPath === '/terrain-lab' ? (
+          <div className="flex-1 h-full overflow-hidden bg-[#080B12]">
             <TerrainView onSelectSiteAndGoToMap={handleSelectSiteAndGoToMap} />
           </div>
-        ) : activeTab === 'missions' ? (
-          <div className="flex-1 h-full overflow-hidden bg-[#020A10]">
-            <MissionsView onSelectSiteAndGoToMap={handleSelectSiteAndGoToMap} />
+        ) : currentPath === '/route-planner' ? (
+          <div className="flex-1 h-full overflow-hidden bg-[#080B12]">
+            <RoutePlannerView
+              onSelectSiteAndGoToMap={handleSelectSiteAndGoToMap}
+              onOpenReportModal={() => setIsReportModalOpen(true)}
+              activeLayer={activeLayer}
+            />
+          </div>
+        ) : currentPath === '/mission-data' ? (
+          <div className="flex-1 h-full overflow-hidden bg-[#080B12]">
+            <ScienceView
+              onSelectSiteAndGoToMap={handleSelectSiteAndGoToMap}
+              onSelectLayerAndGoToMap={handleSelectLayerAndGoToMap}
+            />
+          </div>
+        ) : currentPath === '/about' ? (
+          <div className="flex-1 h-full overflow-hidden bg-[#080B12]">
+            <AboutView onNavigate={navigate} />
           </div>
         ) : (
-          <div className="flex-1 h-full overflow-hidden bg-[#020A10]">
-            <ScienceView />
-          </div>
+          <HomeView
+            onNavigate={navigate}
+            onSelectSiteAndGoToMap={handleSelectSiteAndGoToMap}
+            onSelectLayerAndGoToMap={handleSelectLayerAndGoToMap}
+          />
         )}
       </div>
+
+      {/* 3. MISSION DOSSIER REPORT MODAL */}
+      <MissionReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        selectedSite={selectedSite}
+        selectedCoordinate={selectedCoordinate}
+        activeLayer={activeLayer}
+        missionRoute={missionRoute}
+      />
     </div>
   );
 }

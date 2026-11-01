@@ -1,4 +1,4 @@
-export type TabType = 'map' | 'terrain' | 'missions' | 'science' | 'route';
+export type TabType = 'home' | 'map' | 'terrain' | 'route' | 'science' | 'discover' | 'missions' | 'about';
 
 export interface MarsCoordinate {
   lat: number;
@@ -28,7 +28,7 @@ export interface MarsSite {
 
 export type LayerCategory = 'imagery' | 'elevation' | 'roughness' | 'scientific';
 export type LayerStatus = 'connected' | 'unavailable' | 'calibrating';
-export type LayerGroup = 'base' | 'scientific' | 'highres';
+export type LayerGroup = 'imagery' | 'topography' | 'thermal' | 'highres' | 'base' | 'scientific';
 
 export interface MapLayerConfig {
   id: string;
@@ -47,6 +47,7 @@ export interface MapLayerConfig {
   unavailableReason?: string;
   opacity?: number;
   legendNotes?: string;
+  texturePath?: string;
 }
 
 export interface MapOverlaysConfig {
@@ -54,6 +55,37 @@ export interface MapOverlaysConfig {
   missionLocations: boolean;
   pointsOfInterest: boolean;
   plannedRoute: boolean;
+}
+
+export interface RouteProfilePoint {
+  distanceKm: number;
+  elevationMeters: number;
+  slopeDeg: number;
+  roughnessIndex: number;
+  lat: number;
+  lng: number;
+}
+
+export interface CandidateRoute {
+  id: string;
+  name: string;
+  description: string;
+  path: [number, number][]; // [lng, lat]
+  distanceKm: number;
+  elevationDeltaMeters: number;
+  maxSlopeDeg: number;
+  avgSlopeDeg: number;
+  terrainCostScore: number;
+  estimatedSolDays: number;
+  difficulty: 'Low' | 'Moderate' | 'High' | 'Severe';
+  profile: RouteProfilePoint[];
+}
+
+export interface RouteConstraintsConfig {
+  maxSlopeDeg: number;
+  roughnessPenaltyWeight: number;
+  slopePenaltyWeight: number;
+  roverProfile: 'perseverance' | 'curiosity' | 'exploration-drone';
 }
 
 export interface MissionRoutePlan {
@@ -65,6 +97,60 @@ export interface MissionRoutePlan {
   estimatedSolDays: number;
   difficultyScore: 'Low' | 'Moderate' | 'High' | 'Severe';
   status: 'Idle' | 'Selected' | 'Planning' | 'Verified';
+  activeCandidateRoute?: CandidateRoute;
+  alternativeRoutes?: CandidateRoute[];
+  constraints?: RouteConstraintsConfig;
+}
+
+export interface LandingSiteCriterion {
+  id: string;
+  name: string;
+  description: string;
+  weight: number; // 0 to 1
+  idealRange: string;
+}
+
+export interface LandingCandidateEvaluation {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  elevationMeters: number;
+  slopeDeg: number;
+  roughnessScore: number;
+  scienceProximityKm: number;
+  coverageResolutionM: number;
+  scores: {
+    slopeScore: number; // 0-100
+    elevationScore: number; // 0-100 (atmospheric braking EDL)
+    roughnessScore: number; // 0-100
+    scienceScore: number; // 0-100
+    dataConfidenceScore: number; // 0-100
+  };
+  overallSuitability: number; // 0-100 weighted
+  verdict: 'Recommended' | 'Conditional' | 'High Risk';
+  scientificJustification: string;
+  engineeringLimitations: string;
+}
+
+export interface ScienceComparisonPair {
+  id: string;
+  title: string;
+  description: string;
+  leftLayerId: string;
+  rightLayerId: string;
+  leftLabel: string;
+  rightLabel: string;
+  scientificGoal: string;
+}
+
+export interface AiChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  citations?: string[];
+  suggestedQuestions?: string[];
 }
 
 export interface TelemetryState {
