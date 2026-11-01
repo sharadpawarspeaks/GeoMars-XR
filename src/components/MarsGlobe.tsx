@@ -116,10 +116,15 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
         return '/textures/mars_themis_night.jpg';
       case 'false-color-mineral':
         return '/textures/mars_false_color.jpg';
+<<<<<<< HEAD
       case 'slope-map':
       case 'terrain-roughness':
         return '/textures/mars_roughness.jpg';
       case 'regional-imagery':
+=======
+      case 'terrain-roughness':
+        return '/textures/mars_roughness.jpg';
+>>>>>>> origin/main
       case 'ctx-mosaic':
         return '/textures/mars_ctx.jpg';
       case 'hirise-regional':
@@ -138,7 +143,11 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
+<<<<<<< HEAD
     scene.background = new THREE.Color(0x080b12);
+=======
+    scene.background = new THREE.Color(0x020a10);
+>>>>>>> origin/main
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
     // Position to frame Mars matching the reference perspective
@@ -239,7 +248,11 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
       roughness: 0.85,
       metalness: 0.05,
       transparent: true,
+<<<<<<< HEAD
       opacity: Math.max(0.1, Math.min(1, layerOpacity / 100))
+=======
+      opacity: layerOpacity
+>>>>>>> origin/main
     });
 
     const marsMesh = new THREE.Mesh(sphereGeometry, marsMaterial);
@@ -301,7 +314,11 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
           if (site.category === 'rover' && !overlays.roverLandingSites) return null;
           if (site.category === 'lander' && !overlays.missionLocations) return null;
           if ((site.category === 'volcano' || site.category === 'canyon' || site.category === 'basin') && !overlays.pointsOfInterest) {
+<<<<<<< HEAD
             return null;
+=======
+            if (site.id !== 'olympus-mons' && site.id !== 'valles-marineris') return null;
+>>>>>>> origin/main
           }
 
           const worldPos = latLngToVector3(site.lat, site.lng, GLOBE_RADIUS);
@@ -344,7 +361,11 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
   useEffect(() => {
     if (!marsMeshRef.current) return;
     const mat = marsMeshRef.current.material as THREE.MeshStandardMaterial;
+<<<<<<< HEAD
     mat.opacity = Math.max(0.1, Math.min(1, layerOpacity / 100));
+=======
+    mat.opacity = layerOpacity;
+>>>>>>> origin/main
 
     const loader = new THREE.TextureLoader();
     onLoadingChange(true);
@@ -562,13 +583,18 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
       ref={containerRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
+<<<<<<< HEAD
       className="relative w-full h-full bg-[#080B12] overflow-hidden select-none cursor-grab active:cursor-grabbing"
+=======
+      className="relative w-full h-full bg-[#020A10] overflow-hidden select-none cursor-grab active:cursor-grabbing"
+>>>>>>> origin/main
     >
       {/* 1. Upper-Left: Compact Planet Selector (Mars ▾) */}
       <div className="absolute top-4 left-4 z-10 pointer-events-auto">
         <div className="relative">
           <button
             onClick={() => setIsMarsDropdownOpen(!isMarsDropdownOpen)}
+<<<<<<< HEAD
             className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#111824]/90 border border-[#273244] hover:border-[#FF6B35]/50 shadow-xl backdrop-blur-md transition-all text-xs cursor-pointer"
           >
             <img src="/geomars-logo.png" alt="Mars" className="w-4 h-4 object-contain shrink-0" />
@@ -585,6 +611,24 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
                 Phobos (Planned)
               </div>
               <div className="px-2.5 py-1.5 text-[11px] text-[#94A3B8] cursor-not-allowed">
+=======
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#04121B]/90 border border-[#19303E] hover:border-[#FF6B35]/50 shadow-xl backdrop-blur-md transition-all text-xs"
+          >
+            <img src="/geomars-logo.png" alt="Mars" className="w-4 h-4 object-contain shrink-0" />
+            <span className="font-bold text-[#F4F7FA]">Mars</span>
+            <ChevronDown className="w-3 h-3 text-[#71869A]" />
+          </button>
+
+          {isMarsDropdownOpen && (
+            <div className="absolute top-9 left-0 bg-[#04121B] border border-[#19303E] rounded-xl shadow-2xl p-1 z-30 min-w-[130px] text-xs">
+              <div className="px-2.5 py-1.5 text-[11px] font-semibold text-[#FF6B35] bg-[#0B1C29] rounded-lg">
+                Mars (Selected)
+              </div>
+              <div className="px-2.5 py-1.5 text-[11px] text-[#71869A] cursor-not-allowed">
+                Phobos (Planned)
+              </div>
+              <div className="px-2.5 py-1.5 text-[11px] text-[#71869A] cursor-not-allowed">
+>>>>>>> origin/main
                 Deimos (Planned)
               </div>
             </div>
@@ -594,6 +638,7 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
 
       {/* 2. Upper-Right: Segmented View Selector [ 2D | 3D ] */}
       <div className="absolute top-4 right-4 z-10 pointer-events-auto">
+<<<<<<< HEAD
         <div className="flex items-center gap-1 bg-[#111824]/90 border border-[#273244] p-1 rounded-xl shadow-xl backdrop-blur-md">
           <button
             onClick={() => onChangeViewMode('2d')}
@@ -601,16 +646,32 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
               viewMode === '2d'
                 ? 'bg-[#FF6B35] text-white shadow-md'
                 : 'text-[#94A3B8] hover:text-white'
+=======
+        <div className="flex items-center gap-1 bg-[#04121B]/90 border border-[#19303E] p-1 rounded-xl shadow-xl backdrop-blur-md">
+          <button
+            onClick={() => onChangeViewMode('2d')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              viewMode === '2d'
+                ? 'bg-[#FF6B35] text-white shadow-md'
+                : 'text-[#A7B8C8] hover:text-white'
+>>>>>>> origin/main
             }`}
           >
             2D
           </button>
           <button
             onClick={() => onChangeViewMode('3d')}
+<<<<<<< HEAD
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               viewMode === '3d'
                 ? 'bg-[#FF6B35] text-white shadow-md'
                 : 'text-[#94A3B8] hover:text-white'
+=======
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              viewMode === '3d'
+                ? 'bg-[#FF6B35] text-white shadow-md'
+                : 'text-[#A7B8C8] hover:text-white'
+>>>>>>> origin/main
             }`}
           >
             3D
@@ -768,10 +829,17 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* 5. Lower-Left: Geographic Scale Bar */}
       <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
         <div className="bg-[#111824]/85 border border-[#273244] px-3 py-1.5 rounded-lg shadow-lg backdrop-blur-md flex flex-col gap-0.5">
           <div className="flex justify-between text-[9px] text-[#94A3B8] font-mono w-40">
+=======
+      {/* 5. Lower-Left: Geographic Scale Bar matching reference */}
+      <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
+        <div className="bg-[#04121B]/85 border border-[#19303E] px-3 py-1.5 rounded-lg shadow-lg backdrop-blur-md flex flex-col gap-0.5">
+          <div className="flex justify-between text-[9px] text-[#A7B8C8] font-mono w-40">
+>>>>>>> origin/main
             <span>0</span>
             <span>500</span>
             <span>1,000 km</span>
@@ -782,6 +850,7 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* 6. Lower-Right: Comprehensive Map Information Strip */}
       <div className="absolute bottom-4 right-4 z-10 pointer-events-none">
         <div className="bg-[#111824]/90 border border-[#273244] rounded-lg px-3 py-1.5 shadow-xl backdrop-blur-md flex items-center gap-3 font-mono text-[11px] text-[#94A3B8]">
@@ -805,6 +874,16 @@ export const MarsGlobe: FC<MarsGlobeProps> = ({
             <span className="w-1.5 h-1.5 rounded-full bg-[#35C98A]" />
             <strong className="text-[#35C98A]">ONLINE</strong>
           </span>
+=======
+      {/* 6. Lower-Right: Coordinates Readout Pill matching reference */}
+      <div className="absolute bottom-4 right-4 z-10 pointer-events-none">
+        <div className="bg-[#04121B]/90 border border-[#19303E] rounded-lg px-3 py-1.5 shadow-xl backdrop-blur-md flex items-center gap-3 font-mono text-[11px] text-[#A7B8C8]">
+          <span>Lat: <strong className="text-[#F4F7FA]">{activeLat.toFixed(2)}° {activeLat >= 0 ? 'N' : 'S'}</strong></span>
+          <span className="text-[#19303E]">|</span>
+          <span>Lon: <strong className="text-[#F4F7FA]">{activeLng.toFixed(2)}° {activeLng >= 0 ? 'E' : 'W'}</strong></span>
+          <span className="text-[#19303E]">|</span>
+          <span>Elev: <strong className="text-[#F4F7FA]">{formatElevation(activeElev)}</strong></span>
+>>>>>>> origin/main
         </div>
       </div>
     </div>

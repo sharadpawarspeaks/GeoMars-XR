@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 export type TabType = 'home' | 'map' | 'terrain' | 'route' | 'science' | 'discover' | 'missions' | 'about';
+=======
+export type TabType = 'map' | 'terrain' | 'missions' | 'science' | 'route';
+>>>>>>> origin/main
 
 export interface MarsCoordinate {
   lat: number;
@@ -28,7 +32,11 @@ export interface MarsSite {
 
 export type LayerCategory = 'imagery' | 'elevation' | 'roughness' | 'scientific';
 export type LayerStatus = 'connected' | 'unavailable' | 'calibrating';
+<<<<<<< HEAD
 export type LayerGroup = 'imagery' | 'topography' | 'thermal' | 'highres' | 'base' | 'scientific';
+=======
+export type LayerGroup = 'base' | 'scientific' | 'highres';
+>>>>>>> origin/main
 
 export interface MapLayerConfig {
   id: string;
@@ -47,7 +55,10 @@ export interface MapLayerConfig {
   unavailableReason?: string;
   opacity?: number;
   legendNotes?: string;
+<<<<<<< HEAD
   texturePath?: string;
+=======
+>>>>>>> origin/main
 }
 
 export interface MapOverlaysConfig {
@@ -57,6 +68,7 @@ export interface MapOverlaysConfig {
   plannedRoute: boolean;
 }
 
+<<<<<<< HEAD
 export interface RouteProfilePoint {
   distanceKm: number;
   elevationMeters: number;
@@ -88,6 +100,8 @@ export interface RouteConstraintsConfig {
   roverProfile: 'perseverance' | 'curiosity' | 'exploration-drone';
 }
 
+=======
+>>>>>>> origin/main
 export interface MissionRoutePlan {
   start: MarsSite | MarsCoordinate | null;
   destination: MarsSite | MarsCoordinate | null;
@@ -97,6 +111,7 @@ export interface MissionRoutePlan {
   estimatedSolDays: number;
   difficultyScore: 'Low' | 'Moderate' | 'High' | 'Severe';
   status: 'Idle' | 'Selected' | 'Planning' | 'Verified';
+<<<<<<< HEAD
   activeCandidateRoute?: CandidateRoute;
   alternativeRoutes?: CandidateRoute[];
   constraints?: RouteConstraintsConfig;
@@ -151,6 +166,8 @@ export interface AiChatMessage {
   timestamp: string;
   citations?: string[];
   suggestedQuestions?: string[];
+=======
+>>>>>>> origin/main
 }
 
 export interface TelemetryState {

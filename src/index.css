@@ -6,8 +6,13 @@
     width: 100%;
     margin: 0;
     padding: 0;
+<<<<<<< HEAD
     background-color: #080B12;
     color: #F5F7FA;
+=======
+    background-color: #020A10;
+    color: #F4F7FA;
+>>>>>>> origin/main
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
@@ -24,7 +29,11 @@
   background: transparent;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
+<<<<<<< HEAD
   background: #273244;
+=======
+  background: #19303E;
+>>>>>>> origin/main
   border-radius: 9999px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
@@ -35,8 +44,13 @@
 input[type="range"].accent-orange-slider {
   -webkit-appearance: none;
   appearance: none;
+<<<<<<< HEAD
   background: #0D121C;
   border: 1px solid #273244;
+=======
+  background: #081925;
+  border: 1px solid #19303E;
+>>>>>>> origin/main
   border-radius: 9999px;
   height: 6px;
   outline: none;
@@ -50,7 +64,11 @@ input[type="range"].accent-orange-slider::-webkit-slider-thumb {
   border-radius: 50%;
   background: #FF6B35;
   cursor: pointer;
+<<<<<<< HEAD
   border: 2px solid #F5F7FA;
+=======
+  border: 2px solid #F4F7FA;
+>>>>>>> origin/main
   box-shadow: 0 0 8px rgba(255, 107, 53, 0.6);
   transition: transform 0.15s ease;
 }
@@ -59,9 +77,15 @@ input[type="range"].accent-orange-slider::-webkit-slider-thumb:hover {
   transform: scale(1.2);
 }
 
+<<<<<<< HEAD
 /* OpenLayers Custom Mission-Control Styling Overrides */
 .ol-viewport {
   background-color: #080B12 !important;
+=======
+/* OpenLayers Custom High-Tech Styling Overrides */
+.ol-viewport {
+  background-color: #020A10 !important;
+>>>>>>> origin/main
 }
 
 .ol-control {
@@ -70,8 +94,13 @@ input[type="range"].accent-orange-slider::-webkit-slider-thumb:hover {
 }
 
 .ol-scale-line {
+<<<<<<< HEAD
   background: rgba(17, 24, 36, 0.88) !important;
   border: 1px solid #273244 !important;
+=======
+  background: rgba(4, 18, 27, 0.85) !important;
+  border: 1px solid #19303E !important;
+>>>>>>> origin/main
   border-radius: 6px !important;
   padding: 3px 8px !important;
   bottom: 14px !important;
@@ -79,14 +108,22 @@ input[type="range"].accent-orange-slider::-webkit-slider-thumb:hover {
   right: auto !important;
   font-family: 'JetBrains Mono', monospace !important;
   font-size: 10px !important;
+<<<<<<< HEAD
   color: #94A3B8 !important;
+=======
+  color: #A7B8C8 !important;
+>>>>>>> origin/main
   backdrop-filter: blur(12px) !important;
 }
 
 .ol-scale-line-inner {
   border: 1px solid #FF6B35 !important;
   border-top: none !important;
+<<<<<<< HEAD
   color: #F5F7FA !important;
+=======
+  color: #F4F7FA !important;
+>>>>>>> origin/main
   font-size: 9px !important;
   font-weight: 500 !important;
   letter-spacing: 0.05em !important;

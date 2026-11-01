@@ -1,4 +1,5 @@
 /**
+<<<<<<< HEAD
  * Mathematical and planetary geodesy utilities for Mars exploration.
  * Mars mean volumetric radius = 3389.5 km
  * Mars equatorial radius = 3396.2 km, polar radius = 3376.2 km
@@ -7,6 +8,12 @@ export const MARS_RADIUS_KM = 3389.5;
 export const MARS_EQUATORIAL_RADIUS_KM = 3396.2;
 export const MARS_POLAR_RADIUS_KM = 3376.2;
 export const MARS_SURFACE_GRAVITY = 3.72; // m/s²
+=======
+ * Mathematical and astronomical utilities for Mars planetary navigation.
+ * Mars mean volumetric radius = 3389.5 km
+ */
+export const MARS_RADIUS_KM = 3389.5;
+>>>>>>> origin/main
 
 /**
  * Calculates Great-Circle distance across Mars surface using Haversine formula.
@@ -33,6 +40,7 @@ export function calculateMarsDistanceKm(
 }
 
 /**
+<<<<<<< HEAD
  * Intermediate point along great circle path at fraction t (0 <= t <= 1)
  */
 export function intermediateMarsPoint(
@@ -153,10 +161,16 @@ export function calculateSlopeDeg(elevDeltaMeters: number, distanceMeters: numbe
 }
 
 /**
+=======
+>>>>>>> origin/main
  * Formats coordinates into standard planetary scientific notation.
  * e.g. "18.38° N, 77.58° E"
  */
 export function formatMarsCoordinate(lat: number, lng: number): string {
+<<<<<<< HEAD
+=======
+  // Normalize longitude to -180 .. 180
+>>>>>>> origin/main
   let normLng = lng;
   while (normLng > 180) normLng -= 360;
   while (normLng < -180) normLng += 360;
@@ -187,12 +201,18 @@ export function formatElevation(meters?: number): string {
 
 /**
  * Estimates nominal rover drive duration in Martian Sols.
+<<<<<<< HEAD
  * Base rate: ~0.12 km/sol (120 m/sol nominal for Perseverance/Curiosity)
  */
 export function estimateRoverSolTransit(
   distanceKm: number,
   elevationDeltaMeters = 0
 ): {
+=======
+ * Based on nominal Perseverance/Curiosity drive rate of ~120 m/sol sustained.
+ */
+export function estimateRoverSolTransit(distanceKm: number, elevationDeltaMeters = 0): {
+>>>>>>> origin/main
   sols: number;
   difficulty: 'Low' | 'Moderate' | 'High' | 'Severe';
 } {
@@ -200,6 +220,10 @@ export function estimateRoverSolTransit(
     return { sols: 0, difficulty: 'Low' };
   }
 
+<<<<<<< HEAD
+=======
+  // Base traverse rate: ~0.12 km / sol (120 meters per operational sol)
+>>>>>>> origin/main
   const baseRateKmPerSol = 0.12;
   const slopeRatio = Math.abs(elevationDeltaMeters) / (distanceKm * 1000);
 
@@ -222,7 +246,11 @@ export function estimateRoverSolTransit(
 }
 
 /**
+<<<<<<< HEAD
  * Approximate Mars Sol & Mission Telemetry
+=======
+ * Approximate Mars Sol (MY 38 approximate reference)
+>>>>>>> origin/main
  */
 export function getMarsMissionTelemetry(): {
   currentSol: number;
@@ -231,8 +259,13 @@ export function getMarsMissionTelemetry(): {
   utcString: string;
 } {
   const now = new Date();
+<<<<<<< HEAD
   const daysSinceEpoch =
     (now.getTime() - new Date('2021-02-18T20:55:00Z').getTime()) / (1000 * 60 * 60 * 24);
+=======
+  // Simplified calculation for mission display
+  const daysSinceEpoch = (now.getTime() - new Date('2021-02-18T20:55:00Z').getTime()) / (1000 * 60 * 60 * 24);
+>>>>>>> origin/main
   const solPerseverance = Math.floor(daysSinceEpoch * (24 / 24.65979));
 
   return {
