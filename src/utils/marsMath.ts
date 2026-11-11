@@ -1,5 +1,4 @@
 /**
-<<<<<<< HEAD
  * Mathematical and planetary geodesy utilities for Mars exploration.
  * Mars mean volumetric radius = 3389.5 km
  * Mars equatorial radius = 3396.2 km, polar radius = 3376.2 km
@@ -8,12 +7,6 @@ export const MARS_RADIUS_KM = 3389.5;
 export const MARS_EQUATORIAL_RADIUS_KM = 3396.2;
 export const MARS_POLAR_RADIUS_KM = 3376.2;
 export const MARS_SURFACE_GRAVITY = 3.72; // m/s²
-=======
- * Mathematical and astronomical utilities for Mars planetary navigation.
- * Mars mean volumetric radius = 3389.5 km
- */
-export const MARS_RADIUS_KM = 3389.5;
->>>>>>> origin/main
 
 /**
  * Calculates Great-Circle distance across Mars surface using Haversine formula.
@@ -40,7 +33,6 @@ export function calculateMarsDistanceKm(
 }
 
 /**
-<<<<<<< HEAD
  * Intermediate point along great circle path at fraction t (0 <= t <= 1)
  */
 export function intermediateMarsPoint(
@@ -61,9 +53,12 @@ export function intermediateMarsPoint(
   const d =
     2 *
     Math.asin(
-      Math.sqrt(
-        Math.sin((f2 - f1) / 2) ** 2 +
-          Math.cos(f1) * Math.cos(f2) * Math.sin((l2 - l1) / 2) ** 2
+      Math.min(
+        1,
+        Math.sqrt(
+          Math.sin((f2 - f1) / 2) ** 2 +
+            Math.cos(f1) * Math.cos(f2) * Math.sin((l2 - l1) / 2) ** 2
+        )
       )
     );
 
@@ -84,22 +79,21 @@ export function intermediateMarsPoint(
 
 /**
  * Standard MOLA areoid approximation for Martian elevation (meters).
- * Uses planetary spherical harmonic approximation anchored by known benchmarks:
+ * Deterministic analytical model anchored by published MOLA benchmarks:
  * - Olympus Mons (+21,287 m)
- * - Tharsis Rise (+8,000 to +14,000 m)
+ * - Tharsis Rise (+6,000 m broad swell)
  * - Valles Marineris (-7,000 m)
  * - Hellas Basin (-7,152 m)
- * - Northern Lowlands / Utopia (-4,000 m)
  * - Jezero Crater (-2,560 m)
  * - Gale Crater (-4,450 m)
+ * - Nili Fossae (-1,850 m)
+ * - Mawrth Vallis (-2,240 m)
  */
 export function estimateMolaElevation(lat: number, lng: number): number {
-  // Normalize longitude to -180 .. 180
   let normLng = lng;
   while (normLng > 180) normLng -= 360;
   while (normLng < -180) normLng += 360;
 
-  // Major geographic focal features
   const olympusDist = calculateMarsDistanceKm(lat, normLng, 18.65, -133.8);
   if (olympusDist < 350) {
     const flankFactor = Math.max(0, 1 - olympusDist / 350);
@@ -130,19 +124,27 @@ export function estimateMolaElevation(lat: number, lng: number): number {
     return Math.round(-3800 - gFactor * 650);
   }
 
-  // Crustal Dichotomy global baseline:
-  // Southern hemisphere elevated (mean ~ +1 to +2 km), Northern Lowlands low (mean ~ -3.5 to -4.5 km)
+  const niliDist = calculateMarsDistanceKm(lat, normLng, 21.0, 74.5);
+  if (niliDist < 180) {
+    const nFactor = Math.max(0, 1 - niliDist / 180);
+    return Math.round(-1200 - nFactor * 650);
+  }
+
+  const mawrthDist = calculateMarsDistanceKm(lat, normLng, 23.99, -18.96);
+  if (mawrthDist < 180) {
+    const mFactor = Math.max(0, 1 - mawrthDist / 180);
+    return Math.round(-1750 - mFactor * 490);
+  }
+
   const dichotomy = Math.sin((lat * Math.PI) / 180);
   let baseElev = dichotomy < 0 ? 1500 * Math.abs(dichotomy) : -3500 * dichotomy;
 
-  // Tharsis bulge broad swell (centered near equator, -100° lon)
   const tharsisDist = calculateMarsDistanceKm(lat, normLng, 0, -100);
   if (tharsisDist < 3000) {
     const tharsisSwell = Math.max(0, 1 - tharsisDist / 3000) * 6000;
     baseElev += tharsisSwell;
   }
 
-  // Regional terrain undulations
   const wave =
     Math.sin((lat * Math.PI) / 45) * 450 +
     Math.cos((normLng * Math.PI) / 60) * 600 +
@@ -161,16 +163,21 @@ export function calculateSlopeDeg(elevDeltaMeters: number, distanceMeters: numbe
 }
 
 /**
-=======
->>>>>>> origin/main
+ * Estimates local regional slope around a lat/lng coordinate using a 1 km baseline.
+ */
+export function estimateLocalSlopeDeg(lat: number, lng: number): number {
+  const baseElev = estimateMolaElevation(lat, lng);
+  const northElev = estimateMolaElevation(lat + 0.017, lng);
+  const eastElev = estimateMolaElevation(lat, lng + 0.017);
+  const maxDelta = Math.max(Math.abs(northElev - baseElev), Math.abs(eastElev - baseElev));
+  return calculateSlopeDeg(maxDelta, 1000);
+}
+
+/**
  * Formats coordinates into standard planetary scientific notation.
  * e.g. "18.38° N, 77.58° E"
  */
 export function formatMarsCoordinate(lat: number, lng: number): string {
-<<<<<<< HEAD
-=======
-  // Normalize longitude to -180 .. 180
->>>>>>> origin/main
   let normLng = lng;
   while (normLng > 180) normLng -= 360;
   while (normLng < -180) normLng += 360;
@@ -194,25 +201,19 @@ export function formatPlanetocentricLon(lng: number): string {
  * Formats elevation with sign and unit.
  */
 export function formatElevation(meters?: number): string {
-  if (meters === undefined || isNaN(meters)) return 'Uncalibrated datum';
+  if (meters === undefined || Number.isNaN(meters)) return 'Uncalibrated datum';
   const prefix = meters > 0 ? '+' : '';
   return `${prefix}${meters.toLocaleString()} m (MOLA datum)`;
 }
 
 /**
  * Estimates nominal rover drive duration in Martian Sols.
-<<<<<<< HEAD
- * Base rate: ~0.12 km/sol (120 m/sol nominal for Perseverance/Curiosity)
+ * Base rate: ~0.12 km/sol (120 m/sol nominal for Perseverance/Curiosity).
  */
 export function estimateRoverSolTransit(
   distanceKm: number,
   elevationDeltaMeters = 0
 ): {
-=======
- * Based on nominal Perseverance/Curiosity drive rate of ~120 m/sol sustained.
- */
-export function estimateRoverSolTransit(distanceKm: number, elevationDeltaMeters = 0): {
->>>>>>> origin/main
   sols: number;
   difficulty: 'Low' | 'Moderate' | 'High' | 'Severe';
 } {
@@ -220,10 +221,6 @@ export function estimateRoverSolTransit(distanceKm: number, elevationDeltaMeters
     return { sols: 0, difficulty: 'Low' };
   }
 
-<<<<<<< HEAD
-=======
-  // Base traverse rate: ~0.12 km / sol (120 meters per operational sol)
->>>>>>> origin/main
   const baseRateKmPerSol = 0.12;
   const slopeRatio = Math.abs(elevationDeltaMeters) / (distanceKm * 1000);
 
@@ -246,11 +243,7 @@ export function estimateRoverSolTransit(distanceKm: number, elevationDeltaMeters
 }
 
 /**
-<<<<<<< HEAD
  * Approximate Mars Sol & Mission Telemetry
-=======
- * Approximate Mars Sol (MY 38 approximate reference)
->>>>>>> origin/main
  */
 export function getMarsMissionTelemetry(): {
   currentSol: number;
@@ -259,13 +252,8 @@ export function getMarsMissionTelemetry(): {
   utcString: string;
 } {
   const now = new Date();
-<<<<<<< HEAD
   const daysSinceEpoch =
     (now.getTime() - new Date('2021-02-18T20:55:00Z').getTime()) / (1000 * 60 * 60 * 24);
-=======
-  // Simplified calculation for mission display
-  const daysSinceEpoch = (now.getTime() - new Date('2021-02-18T20:55:00Z').getTime()) / (1000 * 60 * 60 * 24);
->>>>>>> origin/main
   const solPerseverance = Math.floor(daysSinceEpoch * (24 / 24.65979));
 
   return {

@@ -1,9 +1,8 @@
 node_modules
-<<<<<<< HEAD
-
-dist/
 node_modules/
+dist/
+.iwsdk/
 .env
 .env.local
-=======
->>>>>>> origin/main
+.env.*.local
+*.tsbuildinfo

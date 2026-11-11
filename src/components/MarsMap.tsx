@@ -4,13 +4,9 @@ import 'ol/ol.css';
 import Map from 'ol/Map';
 import View from 'ol/View';
 import TileLayer from 'ol/layer/Tile';
-<<<<<<< HEAD
 import ImageLayer from 'ol/layer/Image';
 import TileWMS from 'ol/source/TileWMS';
 import ImageStatic from 'ol/source/ImageStatic';
-=======
-import TileWMS from 'ol/source/TileWMS';
->>>>>>> origin/main
 import WMTS from 'ol/source/WMTS';
 import WMTSTileGrid from 'ol/tilegrid/WMTS';
 import VectorLayer from 'ol/layer/Vector';
@@ -22,31 +18,27 @@ import { Style, Stroke, Fill, Circle as CircleStyle, Text } from 'ol/style';
 import { defaults as defaultControls } from 'ol/control';
 import type { MapBrowserEvent } from 'ol';
 
-import type { MapLayerConfig, MarsCoordinate, MarsSite, MissionRoutePlan, MapOverlaysConfig } from '../types/mars';
+import type {
+  MapLayerConfig,
+  MarsCoordinate,
+  MarsSite,
+  MissionRoutePlan,
+  MapOverlaysConfig
+} from '../types/mars';
 import { MARS_SITES } from '../data/marsSites';
-<<<<<<< HEAD
-import { formatElevation, intermediateMarsPoint } from '../utils/marsMath';
-=======
-import { formatElevation } from '../utils/marsMath';
->>>>>>> origin/main
+import { formatElevation, intermediateMarsPoint, estimateMolaElevation } from '../utils/marsMath';
+import { MARS_HAZARD_ZONES } from '../utils/roverRouter';
+import { assetUrl } from '../utils/assetUrl';
 import {
   ZoomIn,
   ZoomOut,
   Crosshair,
-<<<<<<< HEAD
-=======
-  Layers,
->>>>>>> origin/main
   ChevronDown,
   ChevronRight,
   AlertCircle,
   Loader2,
-<<<<<<< HEAD
   X,
   Maximize2
-=======
-  X
->>>>>>> origin/main
 } from 'lucide-react';
 
 interface MarsMapProps {
@@ -78,139 +70,143 @@ export const MarsMap: FC<MarsMapProps> = ({
 }) => {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
-<<<<<<< HEAD
   const bgImageLayerRef = useRef<ImageLayer<ImageStatic> | null>(null);
-=======
->>>>>>> origin/main
   const baseTileLayerRef = useRef<TileLayer<WMTS | TileWMS> | null>(null);
   const vectorSourceRef = useRef<VectorSource>(new VectorSource());
   const routeSourceRef = useRef<VectorSource>(new VectorSource());
 
-<<<<<<< HEAD
-  const getLayerTexture = (layerId: string): string => {
-    switch (layerId) {
+  const getLayerTexture = useCallback((layer: MapLayerConfig): string => {
+    if (layer.texturePath) return assetUrl(layer.texturePath);
+    switch (layer.id) {
       case 'elevation-mola':
-        return '/textures/mars_mola_color.jpg';
+        return assetUrl('textures/mars_mola_color.jpg');
       case 'hillshade-mola':
-        return '/textures/mars_hillshade.jpg';
+        return assetUrl('textures/mars_hillshade.jpg');
       case 'themis-day':
-        return '/textures/mars_themis_day.jpg';
+        return assetUrl('textures/mars_themis_day.jpg');
       case 'themis-night':
-        return '/textures/mars_themis_night.jpg';
+        return assetUrl('textures/mars_themis_night.jpg');
       case 'false-color-mineral':
-        return '/textures/mars_false_color.jpg';
+        return assetUrl('textures/mars_false_color.jpg');
       case 'slope-map':
       case 'terrain-roughness':
-        return '/textures/mars_roughness.jpg';
+        return assetUrl('textures/mars_roughness.jpg');
       case 'regional-imagery':
       case 'ctx-mosaic':
-        return '/textures/mars_ctx.jpg';
+        return assetUrl('textures/mars_ctx.jpg');
       case 'hirise-regional':
-        return '/textures/mars_hirise.jpg';
+        return assetUrl('textures/mars_hirise.jpg');
       case 'visual-imagery':
       default:
-        return '/textures/mars_surface_2k.jpg';
+        return assetUrl('textures/mars_surface_2k.jpg');
     }
-  };
+  }, []);
 
-=======
->>>>>>> origin/main
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hoveredCoordinate, setHoveredCoordinate] = useState<MarsCoordinate | null>(null);
   const [isMarsDropdownOpen, setIsMarsDropdownOpen] = useState(false);
 
-  // Helper: create WMTS source for NASA Mars Trek
-  const createNasaWmtsSource = useCallback((layerConfig: MapLayerConfig) => {
-    const resolutions: number[] = [];
-    const matrixIds: string[] = [];
+  const createNasaWmtsSource = useCallback(
+    (layerConfig: MapLayerConfig) => {
+      const resolutions: number[] = [];
+      const matrixIds: string[] = [];
 
-    for (let z = 0; z <= 8; z++) {
-      matrixIds.push(z.toString());
-      resolutions.push(0.703125 / Math.pow(2, z));
-    }
+      for (let z = 0; z <= 8; z++) {
+        matrixIds.push(z.toString());
+        resolutions.push(0.703125 / Math.pow(2, z));
+      }
 
-    const tileGrid = new WMTSTileGrid({
-      origin: [-180, 90],
-      resolutions,
-      matrixIds,
-      tileSize: [256, 256]
-    });
+      const tileGrid = new WMTSTileGrid({
+        origin: [-180, 90],
+        resolutions,
+        matrixIds,
+        tileSize: [256, 256]
+      });
 
-    const layerId = layerConfig.layerIdentifier || 'Mars_Viking_MDIM21_ClrMosaic_global_232m';
-    const wmtsUrl =
-      layerConfig.wmtsTemplate ||
-      `https://trek.nasa.gov/tiles/Mars/EQ/${layerId}/1.0.0/default/default028mm/{TileMatrix}/{TileRow}/{TileCol}.jpg`;
+      const layerId = layerConfig.layerIdentifier || 'Mars_Viking_MDIM21_ClrMosaic_global_232m';
+      const wmtsUrl =
+        layerConfig.wmtsTemplate ||
+        `https://trek.nasa.gov/tiles/Mars/EQ/${layerId}/1.0.0/default/default028mm/{TileMatrix}/{TileRow}/{TileCol}.jpg`;
 
-    const source = new WMTS({
-      url: wmtsUrl,
-      layer: layerId,
-      matrixSet: 'default028mm',
-      format: 'image/jpeg',
-      projection: 'EPSG:4326',
-      tileGrid,
-      style: 'default',
-      wrapX: true,
-      crossOrigin: 'anonymous',
-      requestEncoding: 'REST'
-    });
+      const source = new WMTS({
+        url: wmtsUrl,
+        layer: layerId,
+        matrixSet: 'default028mm',
+        format: 'image/jpeg',
+        projection: 'EPSG:4326',
+        tileGrid,
+        style: 'default',
+        wrapX: true,
+        crossOrigin: 'anonymous',
+        requestEncoding: 'REST'
+      });
 
-    source.on('tileloadstart', () => {
-      setIsLoading(true);
-      onLoadingChange(true);
-    });
+      source.on('tileloadstart', () => {
+        setIsLoading(true);
+        onLoadingChange(true);
+      });
 
-    source.on('tileloadend', () => {
-      setIsLoading(false);
-      onLoadingChange(false);
-      setLoadError(null);
-    });
+      source.on('tileloadend', () => {
+        setIsLoading(false);
+        onLoadingChange(false);
+        setLoadError(null);
+      });
 
-    source.on('tileloaderror', () => {
-      setIsLoading(false);
-      onLoadingChange(false);
-      setLoadError('Some NASA Mars Trek tiles experienced a network timeout. Retrying in background...');
-    });
+      source.on('tileloaderror', () => {
+        setIsLoading(false);
+        onLoadingChange(false);
+        setLoadError(
+          'Remote NASA Mars Trek tiles unavailable; displaying verified offline NASA/USGS mosaic fallback.'
+        );
+      });
 
-    return source;
-  }, [onLoadingChange]);
+      return source;
+    },
+    [onLoadingChange]
+  );
 
-  // Helper: create WMS source for USGS Astrogeology
-  const createUsgsWmsSource = useCallback((layerConfig: MapLayerConfig) => {
-    const source = new TileWMS({
-      url: layerConfig.endpointUrl || 'https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/mars/mars_simp_cyl.map',
-      params: {
-        LAYERS: layerConfig.layerIdentifier || 'MDIM21_color',
-        TILED: true,
-        VERSION: '1.1.1',
-        STYLES: '',
-        FORMAT: 'image/jpeg'
-      },
-      projection: 'EPSG:4326',
-      crossOrigin: 'anonymous'
-    });
+  const createUsgsWmsSource = useCallback(
+    (layerConfig: MapLayerConfig) => {
+      const source = new TileWMS({
+        url:
+          layerConfig.endpointUrl ||
+          'https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/mars/mars_simp_cyl.map',
+        params: {
+          LAYERS: layerConfig.layerIdentifier || 'MDIM21_color',
+          TILED: true,
+          VERSION: '1.1.1',
+          STYLES: '',
+          FORMAT: 'image/jpeg'
+        },
+        projection: 'EPSG:4326',
+        crossOrigin: 'anonymous'
+      });
 
-    source.on('tileloadstart', () => {
-      setIsLoading(true);
-      onLoadingChange(true);
-    });
+      source.on('tileloadstart', () => {
+        setIsLoading(true);
+        onLoadingChange(true);
+      });
 
-    source.on('tileloadend', () => {
-      setIsLoading(false);
-      onLoadingChange(false);
-      setLoadError(null);
-    });
+      source.on('tileloadend', () => {
+        setIsLoading(false);
+        onLoadingChange(false);
+        setLoadError(null);
+      });
 
-    source.on('tileloaderror', () => {
-      setIsLoading(false);
-      onLoadingChange(false);
-      setLoadError('USGS Astrogeology tile service unavailable. Please check connection or switch layer.');
-    });
+      source.on('tileloaderror', () => {
+        setIsLoading(false);
+        onLoadingChange(false);
+        setLoadError(
+          'Remote USGS Astrogeology tile service unreachable; displaying local offline NASA/USGS fallback texture.'
+        );
+      });
 
-    return source;
-  }, [onLoadingChange]);
+      return source;
+    },
+    [onLoadingChange]
+  );
 
-  // Initialize OpenLayers Map once
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return;
 
@@ -219,12 +215,10 @@ export const MarsMap: FC<MarsMapProps> = ({
         ? createUsgsWmsSource(activeLayer)
         : createNasaWmtsSource(activeLayer);
 
-<<<<<<< HEAD
     const normOpacity = Math.max(0.1, Math.min(1, layerOpacity / 100));
 
-    // Local 2K raster foundation layer
     const bgImageSource = new ImageStatic({
-      url: getLayerTexture(activeLayer.id),
+      url: getLayerTexture(activeLayer),
       imageExtent: [-180, -90, 180, 90],
       projection: 'EPSG:4326'
     });
@@ -235,16 +229,10 @@ export const MarsMap: FC<MarsMapProps> = ({
     });
     bgImageLayerRef.current = bgImageLayer;
 
-    // Live NASA WMTS / USGS WMS tile layer
     const baseLayer = new TileLayer({
       source: initialSource,
       zIndex: 2,
       opacity: normOpacity
-=======
-    const baseLayer = new TileLayer({
-      source: initialSource,
-      opacity: layerOpacity
->>>>>>> origin/main
     });
     baseTileLayerRef.current = baseLayer;
 
@@ -258,7 +246,6 @@ export const MarsMap: FC<MarsMapProps> = ({
       zIndex: 30
     });
 
-    // Create View in EPSG:4326 (Centered around Jezero Crater & Valles Marineris)
     const view = new View({
       projection: 'EPSG:4326',
       center: [20, 5],
@@ -270,30 +257,27 @@ export const MarsMap: FC<MarsMapProps> = ({
 
     const map = new Map({
       target: mapElementRef.current,
-<<<<<<< HEAD
       layers: [bgImageLayer, baseLayer, vectorLayer, routeLayer],
-=======
-      layers: [baseLayer, vectorLayer, routeLayer],
->>>>>>> origin/main
       view,
       controls: defaultControls({ zoom: false, rotate: false, attribution: false })
     });
 
     mapRef.current = map;
 
-    // Pointer move listener
     map.on('pointermove', (evt: MapBrowserEvent<PointerEvent>) => {
       if (evt.dragging) return;
       const coordinate = evt.coordinate;
       if (coordinate && coordinate.length >= 2) {
+        const lng = coordinate[0];
+        const lat = coordinate[1];
         setHoveredCoordinate({
-          lng: coordinate[0],
-          lat: coordinate[1]
+          lng,
+          lat,
+          elevationMeters: estimateMolaElevation(lat, lng)
         });
       }
     });
 
-    // Map click listener
     map.on('singleclick', (evt: MapBrowserEvent<PointerEvent>) => {
       const coordinate = evt.coordinate;
       if (!coordinate || coordinate.length < 2) return;
@@ -321,7 +305,8 @@ export const MarsMap: FC<MarsMapProps> = ({
         onSelectSite(null);
         onSelectCoordinate({
           lat: parseFloat(lat.toFixed(2)),
-          lng: parseFloat(lng.toFixed(2))
+          lng: parseFloat(lng.toFixed(2)),
+          elevationMeters: estimateMolaElevation(lat, lng)
         });
       }
     });
@@ -330,19 +315,16 @@ export const MarsMap: FC<MarsMapProps> = ({
       map.setTarget(undefined);
       mapRef.current = null;
     };
-  }, [createNasaWmtsSource, createUsgsWmsSource, onSelectCoordinate, onSelectSite]);
+  }, [createNasaWmtsSource, createUsgsWmsSource, getLayerTexture, onSelectCoordinate, onSelectSite]);
 
-  // Update Base Layer Source & Opacity dynamically
   useEffect(() => {
-<<<<<<< HEAD
     const normOpacity = Math.max(0.1, Math.min(1, layerOpacity / 100));
 
-    // Update local background static image
     if (bgImageLayerRef.current) {
       bgImageLayerRef.current.setOpacity(normOpacity);
       bgImageLayerRef.current.setSource(
         new ImageStatic({
-          url: getLayerTexture(activeLayer.id),
+          url: getLayerTexture(activeLayer),
           imageExtent: [-180, -90, 180, 90],
           projection: 'EPSG:4326'
         })
@@ -352,65 +334,47 @@ export const MarsMap: FC<MarsMapProps> = ({
     if (baseTileLayerRef.current) {
       baseTileLayerRef.current.setOpacity(normOpacity);
 
-      try {
-        const newSource =
-          activeLayer.serviceType === 'wms'
-            ? createUsgsWmsSource(activeLayer)
-            : createNasaWmtsSource(activeLayer);
+      if (activeLayer.serviceType !== 'offline') {
+        try {
+          const newSource =
+            activeLayer.serviceType === 'wms'
+              ? createUsgsWmsSource(activeLayer)
+              : createNasaWmtsSource(activeLayer);
 
-        baseTileLayerRef.current.setSource(newSource);
-        setLoadError(null);
-      } catch (err) {
-        console.error('Error switching tile layer:', err);
-        setLoadError('Failed to initialize selected Mars tile service.');
+          baseTileLayerRef.current.setSource(newSource);
+          setLoadError(null);
+        } catch (err) {
+          console.error('Error switching tile layer:', err);
+          setLoadError('Failed to initialize selected Mars tile service.');
+        }
       }
     }
 
-    // Zoom into high-detail regional imagery when HiRISE is activated
     if (activeLayer.id === 'hirise-regional' && mapRef.current) {
       const view = mapRef.current.getView();
       view.animate({
-        center: [77.45, 18.44],
+        center: [77.58, 18.38],
         zoom: 4.5,
         duration: 700
       });
-=======
-    if (!baseTileLayerRef.current) return;
-    baseTileLayerRef.current.setOpacity(layerOpacity);
-
-    if (activeLayer.serviceType === 'offline') return;
-
-    try {
-      const newSource =
-        activeLayer.serviceType === 'wms'
-          ? createUsgsWmsSource(activeLayer)
-          : createNasaWmtsSource(activeLayer);
-
-      baseTileLayerRef.current.setSource(newSource);
-      setLoadError(null);
-    } catch (err) {
-      console.error('Error switching tile layer:', err);
-      setLoadError('Failed to initialize selected Mars tile service.');
->>>>>>> origin/main
     }
-  }, [activeLayer, layerOpacity, createNasaWmtsSource, createUsgsWmsSource]);
+  }, [activeLayer, layerOpacity, createNasaWmtsSource, createUsgsWmsSource, getLayerTexture]);
 
-  // Update Mars Landmarks Features in Vector Layer based on Overlays
   useEffect(() => {
     const source = vectorSourceRef.current;
     source.clear();
 
     MARS_SITES.forEach((site) => {
-      // Filter based on overlay switches
       if (site.category === 'rover' && !overlays.roverLandingSites) return;
       if (site.category === 'lander' && !overlays.missionLocations) return;
-      if ((site.category === 'volcano' || site.category === 'canyon' || site.category === 'basin') && !overlays.pointsOfInterest) {
-<<<<<<< HEAD
+      if (
+        (site.category === 'volcano' ||
+          site.category === 'canyon' ||
+          site.category === 'basin' ||
+          site.category === 'delta') &&
+        !overlays.pointsOfInterest
+      ) {
         return;
-=======
-        // Keep Olympus Mons & Valles Marineris always visible as reference landmarks
-        if (site.id !== 'olympus-mons' && site.id !== 'valles-marineris') return;
->>>>>>> origin/main
       }
 
       const feature = new Feature({
@@ -420,14 +384,13 @@ export const MarsMap: FC<MarsMapProps> = ({
 
       const isSelected = selectedSite?.id === site.id;
 
-      // Color based on category
       const color =
         site.category === 'rover'
-          ? '#338BFF' // Blue pin for Jezero / Curiosity rovers matching reference
+          ? '#338BFF'
           : site.category === 'volcano'
           ? '#FFFFFF'
-          : site.category === 'canyon'
-          ? '#A7B8C8'
+          : site.category === 'canyon' || site.category === 'delta'
+          ? '#38BDF8'
           : '#FF6B35';
 
       feature.setStyle(
@@ -443,12 +406,10 @@ export const MarsMap: FC<MarsMapProps> = ({
           text: new Text({
             text: site.name.split(' (')[0],
             offsetY: isSelected ? -16 : -12,
-            font: isSelected
-              ? 'bold 12px Inter, sans-serif'
-              : '500 11px Inter, sans-serif',
+            font: isSelected ? 'bold 12px Inter, sans-serif' : '500 11px Inter, sans-serif',
             fill: new Fill({ color: isSelected ? '#FFFFFF' : '#F4F7FA' }),
-            stroke: new Stroke({ color: '#020A10', width: 3 }),
-            backgroundFill: isSelected ? new Fill({ color: 'rgba(4, 18, 27, 0.85)' }) : undefined,
+            stroke: new Stroke({ color: '#080B12', width: 3 }),
+            backgroundFill: isSelected ? new Fill({ color: 'rgba(13, 18, 28, 0.88)' }) : undefined,
             padding: isSelected ? [2, 6, 2, 6] : undefined
           })
         })
@@ -458,7 +419,7 @@ export const MarsMap: FC<MarsMapProps> = ({
     });
   }, [selectedSite, overlays]);
 
-  // Update Selected Pin & Route Line
+  // Render A* Route & Simulated Hazard Zones
   useEffect(() => {
     const routeSource = routeSourceRef.current;
     routeSource.clear();
@@ -469,45 +430,65 @@ export const MarsMap: FC<MarsMapProps> = ({
       const destLng = 'lng' in missionRoute.destination ? missionRoute.destination.lng : 0;
       const destLat = 'lat' in missionRoute.destination ? missionRoute.destination.lat : 0;
 
-<<<<<<< HEAD
-      // Geodesic curve interpolation for planetary map
-      const lineCoords: [number, number][] = [];
-      const steps = 32;
-      for (let i = 0; i <= steps; i++) {
-        const frac = i / steps;
-        const pt = intermediateMarsPoint(startLat, startLng, destLat, destLng, frac);
-        lineCoords.push([pt.lng, pt.lat]);
+      // Render Simulated Hazard Zones
+      MARS_HAZARD_ZONES.forEach((hz) => {
+        const hzFeature = new Feature({
+          geometry: new Point([hz.lng, hz.lat])
+        });
+        hzFeature.setStyle(
+          new Style({
+            image: new CircleStyle({
+              radius: hz.severity === 'Severe' ? 11 : hz.severity === 'High' ? 9 : 7,
+              fill: new Fill({
+                color:
+                  hz.severity === 'Severe'
+                    ? 'rgba(239, 68, 68, 0.28)'
+                    : 'rgba(245, 185, 66, 0.25)'
+              }),
+              stroke: new Stroke({
+                color: hz.severity === 'Severe' ? '#EF4444' : '#F5B942',
+                width: 1.5,
+                lineDash: [3, 3]
+              })
+            }),
+            text: new Text({
+              text: hz.name.split(' ')[0],
+              offsetY: 14,
+              font: '500 9px JetBrains Mono, monospace',
+              fill: new Fill({ color: '#F5B942' }),
+              stroke: new Stroke({ color: '#080B12', width: 2.5 })
+            })
+          })
+        );
+        routeSource.addFeature(hzFeature);
+      });
+
+      let lineCoords: [number, number][] = [];
+      if (missionRoute.activeCandidateRoute?.path.length) {
+        lineCoords = missionRoute.activeCandidateRoute.path;
+      } else {
+        const steps = 32;
+        for (let i = 0; i <= steps; i++) {
+          const pt = intermediateMarsPoint(startLat, startLng, destLat, destLng, i / steps);
+          lineCoords.push([pt.lng, pt.lat]);
+        }
       }
 
       const lineFeature = new Feature({
         geometry: new LineString(lineCoords)
-=======
-      const lineFeature = new Feature({
-        geometry: new LineString([
-          [startLng, startLat],
-          [destLng, destLat]
-        ])
->>>>>>> origin/main
       });
 
       lineFeature.setStyle(
         new Style({
           stroke: new Stroke({
             color: '#FF6B35',
-<<<<<<< HEAD
             width: 3,
             lineDash: [8, 5]
-=======
-            width: 2.5,
-            lineDash: [6, 4]
->>>>>>> origin/main
           })
         })
       );
       routeSource.addFeature(lineFeature);
-<<<<<<< HEAD
 
-      // Add Start & End Waypoint indicators
       const startFeature = new Feature({
         geometry: new Point([startLng, startLat])
       });
@@ -515,8 +496,8 @@ export const MarsMap: FC<MarsMapProps> = ({
         new Style({
           image: new CircleStyle({
             radius: 8,
-            fill: new Fill({ color: 'rgba(255, 107, 53, 0.4)' }),
-            stroke: new Stroke({ color: '#FF6B35', width: 2.5 })
+            fill: new Fill({ color: 'rgba(53, 201, 138, 0.4)' }),
+            stroke: new Stroke({ color: '#35C98A', width: 2.5 })
           })
         })
       );
@@ -536,12 +517,9 @@ export const MarsMap: FC<MarsMapProps> = ({
 
       routeSource.addFeature(startFeature);
       routeSource.addFeature(destFeature);
-=======
->>>>>>> origin/main
     }
   }, [overlays.plannedRoute, missionRoute]);
 
-  // Fly/Pan to specific location when selectedSite changes
   useEffect(() => {
     if (!selectedSite || !mapRef.current) return;
     const view = mapRef.current.getView();
@@ -570,7 +548,6 @@ export const MarsMap: FC<MarsMapProps> = ({
     view.animate({ center: [20, 5], zoom: 2.2, duration: 400 });
   };
 
-<<<<<<< HEAD
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
       mapElementRef.current?.parentElement?.requestFullscreen().catch(() => {});
@@ -579,118 +556,82 @@ export const MarsMap: FC<MarsMapProps> = ({
     }
   };
 
-=======
->>>>>>> origin/main
-  const activeLat = hoveredCoordinate?.lat ?? selectedCoordinate?.lat ?? (selectedSite ? selectedSite.lat : 18.44);
-  const activeLng = hoveredCoordinate?.lng ?? selectedCoordinate?.lng ?? (selectedSite ? selectedSite.lng : 77.45);
-  const activeElev = selectedCoordinate?.elevationMeters ?? (selectedSite ? selectedSite.elevationMeters : -2536);
+  const activeLat =
+    hoveredCoordinate?.lat ?? selectedCoordinate?.lat ?? (selectedSite ? selectedSite.lat : 18.38);
+  const activeLng =
+    hoveredCoordinate?.lng ?? selectedCoordinate?.lng ?? (selectedSite ? selectedSite.lng : 77.58);
+  const activeElev =
+    hoveredCoordinate?.elevationMeters ??
+    selectedCoordinate?.elevationMeters ??
+    (selectedSite ? selectedSite.elevationMeters : -2560);
 
   return (
-<<<<<<< HEAD
     <div className="relative w-full h-full bg-[#080B12] overflow-hidden select-none">
-=======
-    <div className="relative w-full h-full bg-[#020A10] overflow-hidden select-none">
->>>>>>> origin/main
-      {/* Map Canvas */}
       <div
         ref={mapElementRef}
         id="mars-openlayers-viewport"
         className="w-full h-full focus:outline-none"
       />
 
-      {/* 1. Upper-Left: Compact Planet Selector (Mars ▾) */}
       <div className="absolute top-4 left-4 z-10">
         <div className="relative">
           <button
+            type="button"
             onClick={() => setIsMarsDropdownOpen(!isMarsDropdownOpen)}
-<<<<<<< HEAD
             className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#111824]/90 border border-[#273244] hover:border-[#FF6B35]/60 shadow-xl backdrop-blur-md transition-all text-xs cursor-pointer"
           >
-            <img src="/geomars-logo.png" alt="Mars" className="w-4 h-4 object-contain shrink-0" />
+            <img
+              src={assetUrl('geomars-logo.png')}
+              alt="Mars"
+              className="w-4 h-4 object-contain shrink-0"
+            />
             <span className="font-bold text-[#F5F7FA]">Mars</span>
             <ChevronDown className="w-3 h-3 text-[#94A3B8]" />
           </button>
 
           {isMarsDropdownOpen && (
-            <div className="absolute top-9 left-0 bg-[#111824] border border-[#273244] rounded-xl shadow-2xl p-1 z-30 min-w-[130px] text-xs">
+            <div className="absolute top-9 left-0 bg-[#111824] border border-[#273244] rounded-xl shadow-2xl p-1 z-30 min-w-[140px] text-xs">
               <div className="px-2.5 py-1.5 text-[11px] font-semibold text-[#FF6B35] bg-[#0D121C] rounded-lg">
                 Mars (Selected)
               </div>
-              <div className="px-2.5 py-1.5 text-[11px] text-[#94A3B8] cursor-not-allowed">
-                Phobos (Planned)
+              <div className="px-2.5 py-1.5 text-[11px] text-[#94A3B8]">
+                Phobos (Future Orbit)
               </div>
-              <div className="px-2.5 py-1.5 text-[11px] text-[#94A3B8] cursor-not-allowed">
-=======
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#04121B]/90 border border-[#19303E] hover:border-[#FF6B35]/50 shadow-xl backdrop-blur-md transition-all text-xs"
-          >
-            {/* Mars Icon Dot */}
-            <img src="/geomars-logo.png" alt="Mars" className="w-4 h-4 object-contain shrink-0" />
-            <span className="font-bold text-[#F4F7FA]">Mars</span>
-            <ChevronDown className="w-3 h-3 text-[#71869A]" />
-          </button>
-
-          {isMarsDropdownOpen && (
-            <div className="absolute top-9 left-0 bg-[#04121B] border border-[#19303E] rounded-xl shadow-2xl p-1 z-30 min-w-[130px] text-xs">
-              <div className="px-2.5 py-1.5 text-[11px] font-semibold text-[#FF6B35] bg-[#0B1C29] rounded-lg">
-                Mars (Selected)
-              </div>
-              <div className="px-2.5 py-1.5 text-[11px] text-[#71869A] cursor-not-allowed">
-                Phobos (Planned)
-              </div>
-              <div className="px-2.5 py-1.5 text-[11px] text-[#71869A] cursor-not-allowed">
->>>>>>> origin/main
-                Deimos (Planned)
+              <div className="px-2.5 py-1.5 text-[11px] text-[#94A3B8]">
+                Deimos (Future Orbit)
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* 2. Upper-Right: Segmented View Selector [ 2D | 3D ] */}
       <div className="absolute top-4 right-4 z-10">
-<<<<<<< HEAD
         <div className="flex items-center gap-1 bg-[#111824]/90 border border-[#273244] p-1 rounded-xl shadow-xl backdrop-blur-md">
           <button
+            type="button"
             onClick={() => onChangeViewMode('2d')}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               viewMode === '2d'
                 ? 'bg-[#FF6B35] text-white shadow-md'
                 : 'text-[#94A3B8] hover:text-white'
-=======
-        <div className="flex items-center gap-1 bg-[#04121B]/90 border border-[#19303E] p-1 rounded-xl shadow-xl backdrop-blur-md">
-          <button
-            onClick={() => onChangeViewMode('2d')}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-              viewMode === '2d'
-                ? 'bg-[#FF6B35] text-white shadow-md'
-                : 'text-[#A7B8C8] hover:text-white'
->>>>>>> origin/main
             }`}
           >
-            2D
+            2D Map
           </button>
           <button
+            type="button"
             onClick={() => onChangeViewMode('3d')}
-<<<<<<< HEAD
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               viewMode === '3d'
                 ? 'bg-[#FF6B35] text-white shadow-md'
                 : 'text-[#94A3B8] hover:text-white'
-=======
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-              viewMode === '3d'
-                ? 'bg-[#FF6B35] text-white shadow-md'
-                : 'text-[#A7B8C8] hover:text-white'
->>>>>>> origin/main
             }`}
           >
-            3D
+            3D / XR
           </button>
         </div>
       </div>
 
-<<<<<<< HEAD
-      {/* 3. Floating Callout Card for Selected Landmark */}
       {selectedSite && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
           <div className="bg-[#111824]/95 border border-[#273244] rounded-xl px-3.5 py-2 shadow-2xl backdrop-blur-md flex items-center gap-3">
@@ -700,47 +641,23 @@ export const MarsMap: FC<MarsMapProps> = ({
                 {selectedSite.name.split(' (')[0]}
               </span>
               <span className="text-[10px] text-[#94A3B8]">
-                {selectedSite.mission || (selectedSite.category === 'rover' ? 'Perseverance Rover' : 'Landmark Site')}
+                {selectedSite.mission ||
+                  (selectedSite.category === 'rover' ? 'Rover Site' : 'Scientific Landmark')}
               </span>
             </div>
             <ChevronRight className="w-4 h-4 text-[#94A3B8]" />
-=======
-      {/* 3. Floating Callout Card for Selected Landmark (Jezero Crater popup matching reference) */}
-      {selectedSite && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
-          <div className="bg-[#04121B]/95 border border-[#19303E] rounded-xl px-3.5 py-2 shadow-2xl backdrop-blur-md flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#338BFF] animate-pulse shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[13px] font-bold text-[#F4F7FA] leading-tight">
-                {selectedSite.name.split(' (')[0]}
-              </span>
-              <span className="text-[10px] text-[#A7B8C8]">
-                {selectedSite.mission || (selectedSite.category === 'rover' ? 'Perseverance Rover' : 'Landmark Site')}
-              </span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-[#71869A]" />
->>>>>>> origin/main
           </div>
         </div>
       )}
 
-      {/* 4. Right Vertical Map Controls Toolbar */}
       <div className="absolute top-1/2 -translate-y-1/2 right-4 z-10 flex flex-col gap-2">
-<<<<<<< HEAD
         <div className="flex flex-col bg-[#111824]/90 border border-[#273244] rounded-xl overflow-hidden shadow-2xl backdrop-blur-md">
-          {/* North Compass Reset */}
           <button
+            type="button"
             onClick={handleResetOrientation}
             title="Reset North Orientation"
+            aria-label="Reset North Orientation"
             className="p-2.5 text-[#F5F7FA] hover:bg-[#0D121C] border-b border-[#273244] flex items-center justify-center transition-colors cursor-pointer"
-=======
-        <div className="flex flex-col bg-[#04121B]/90 border border-[#19303E] rounded-xl overflow-hidden shadow-2xl backdrop-blur-md">
-          {/* North Compass Indicator */}
-          <button
-            onClick={handleResetOrientation}
-            title="Reset North Orientation"
-            className="p-2.5 text-[#F4F7FA] hover:bg-[#081925] border-b border-[#19303E] flex items-center justify-center transition-colors"
->>>>>>> origin/main
           >
             <div className="flex flex-col items-center">
               <span className="text-[10px] font-bold text-[#FF6B35] leading-none mb-0.5">N</span>
@@ -748,81 +665,51 @@ export const MarsMap: FC<MarsMapProps> = ({
             </div>
           </button>
 
-          {/* Zoom In */}
           <button
+            type="button"
             onClick={handleZoomIn}
             title="Zoom In"
-<<<<<<< HEAD
+            aria-label="Zoom In"
             className="p-2.5 text-[#F5F7FA] hover:bg-[#0D121C] border-b border-[#273244] transition-colors flex items-center justify-center cursor-pointer"
-=======
-            className="p-2.5 text-[#F4F7FA] hover:bg-[#081925] border-b border-[#19303E] transition-colors flex items-center justify-center"
->>>>>>> origin/main
           >
             <ZoomIn className="w-4 h-4" />
           </button>
 
-          {/* Zoom Out */}
           <button
+            type="button"
             onClick={handleZoomOut}
             title="Zoom Out"
-<<<<<<< HEAD
+            aria-label="Zoom Out"
             className="p-2.5 text-[#F5F7FA] hover:bg-[#0D121C] border-b border-[#273244] transition-colors flex items-center justify-center cursor-pointer"
-=======
-            className="p-2.5 text-[#F4F7FA] hover:bg-[#081925] border-b border-[#19303E] transition-colors flex items-center justify-center"
->>>>>>> origin/main
           >
             <ZoomOut className="w-4 h-4" />
           </button>
 
-<<<<<<< HEAD
-          {/* Recenter */}
           <button
+            type="button"
             onClick={handleResetOrientation}
             title="Recenter Map"
+            aria-label="Recenter Map"
             className="p-2.5 text-[#F5F7FA] hover:bg-[#0D121C] border-b border-[#273244] transition-colors flex items-center justify-center cursor-pointer"
-=======
-          {/* Center / Recenter */}
-          <button
-            onClick={handleResetOrientation}
-            title="Recenter Map"
-            className="p-2.5 text-[#F4F7FA] hover:bg-[#081925] border-b border-[#19303E] transition-colors flex items-center justify-center"
->>>>>>> origin/main
           >
             <Crosshair className="w-4 h-4" />
           </button>
 
-<<<<<<< HEAD
-          {/* Full-Screen Map Toggle */}
           <button
+            type="button"
             onClick={handleToggleFullscreen}
             title="Full-Screen Map View"
+            aria-label="Toggle Fullscreen"
             className="p-2.5 text-[#F5F7FA] hover:bg-[#0D121C] transition-colors flex items-center justify-center cursor-pointer"
           >
             <Maximize2 className="w-4 h-4" />
-=======
-          {/* Layer Control Button */}
-          <button
-            onClick={() => {}}
-            title="Active Layers"
-            className="p-2.5 text-[#F4F7FA] hover:bg-[#081925] transition-colors flex items-center justify-center"
-          >
-            <Layers className="w-4 h-4" />
->>>>>>> origin/main
           </button>
         </div>
       </div>
 
-<<<<<<< HEAD
-      {/* 5. Lower-Left: Geographic Scale Bar */}
       <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
         <div className="bg-[#111824]/85 border border-[#273244] px-3 py-1.5 rounded-lg shadow-lg backdrop-blur-md flex flex-col gap-0.5">
           <div className="flex justify-between text-[9px] text-[#94A3B8] font-mono w-40">
-=======
-      {/* 5. Lower-Left: Geographic Scale Bar matching reference */}
-      <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
-        <div className="bg-[#04121B]/85 border border-[#19303E] px-3 py-1.5 rounded-lg shadow-lg backdrop-blur-md flex flex-col gap-0.5">
-          <div className="flex justify-between text-[9px] text-[#A7B8C8] font-mono w-40">
->>>>>>> origin/main
             <span>0</span>
             <span>500</span>
             <span>1,000 km</span>
@@ -833,83 +720,54 @@ export const MarsMap: FC<MarsMapProps> = ({
         </div>
       </div>
 
-<<<<<<< HEAD
-      {/* 6. Lower-Right: Comprehensive Map Information Strip */}
       <div className="absolute bottom-4 right-4 z-10 pointer-events-none">
         <div className="bg-[#111824]/90 border border-[#273244] rounded-lg px-3 py-1.5 shadow-xl backdrop-blur-md flex items-center gap-3 font-mono text-[11px] text-[#94A3B8]">
           <span>
-            Coords: <strong className="text-[#F5F7FA]">{activeLat.toFixed(2)}° {activeLat >= 0 ? 'N' : 'S'}, {activeLng.toFixed(2)}° {activeLng >= 0 ? 'E' : 'W'}</strong>
+            Coords:{' '}
+            <strong className="text-[#F5F7FA]">
+              {Math.abs(activeLat).toFixed(2)}° {activeLat >= 0 ? 'N' : 'S'},{' '}
+              {Math.abs(activeLng).toFixed(2)}° {activeLng >= 0 ? 'E' : 'W'}
+            </strong>
           </span>
           <span className="text-[#273244]">|</span>
           <span>
             Elev: <strong className="text-[#F5F7FA]">{formatElevation(activeElev)}</strong>
           </span>
           <span className="text-[#273244]">|</span>
-          <span className="truncate max-w-[180px]">
+          <span className="truncate max-w-[160px]">
             Layer: <strong className="text-[#FF6B35]">{activeLayer.name}</strong>
           </span>
           <span className="text-[#273244]">|</span>
           <span>
             Res: <strong className="text-[#F5F7FA]">{activeLayer.resolution}</strong>
           </span>
-          <span className="text-[#273244]">|</span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#35C98A]" />
-            <strong className="text-[#35C98A]">ONLINE</strong>
-          </span>
-=======
-      {/* 6. Lower-Right: Coordinates Readout Pill matching reference */}
-      <div className="absolute bottom-4 right-4 z-10 pointer-events-none">
-        <div className="bg-[#04121B]/90 border border-[#19303E] rounded-lg px-3 py-1.5 shadow-xl backdrop-blur-md flex items-center gap-3 font-mono text-[11px] text-[#A7B8C8]">
-          <span>Lat: <strong className="text-[#F4F7FA]">{activeLat.toFixed(2)}° {activeLat >= 0 ? 'N' : 'S'}</strong></span>
-          <span className="text-[#19303E]">|</span>
-          <span>Lon: <strong className="text-[#F4F7FA]">{activeLng.toFixed(2)}° {activeLng >= 0 ? 'E' : 'W'}</strong></span>
-          <span className="text-[#19303E]">|</span>
-          <span>Elev: <strong className="text-[#F4F7FA]">{formatElevation(activeElev)}</strong></span>
->>>>>>> origin/main
         </div>
       </div>
 
-      {/* Loading Indicator Toast */}
       {isLoading && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-<<<<<<< HEAD
           <div className="flex items-center gap-2 bg-[#111824]/95 border border-[#273244] text-[#94A3B8] text-xs px-3.5 py-1.5 rounded-full shadow-lg backdrop-blur-md">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-[#FF6B35]" />
-            <span className="text-[11px]">Streaming NASA planetary tiles...</span>
-=======
-          <div className="flex items-center gap-2 bg-[#04121B]/95 border border-[#19303E] text-[#A7B8C8] text-xs px-3.5 py-1.5 rounded-full shadow-lg backdrop-blur-md">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#FF6B35]" />
-            <span className="text-[11px]">Loading NASA planetary tiles...</span>
->>>>>>> origin/main
+            <span className="text-[11px]">Streaming NASA/USGS planetary tiles...</span>
           </div>
         </div>
       )}
 
-      {/* Service Warning Toast */}
       {loadError && (
-        <div className="absolute top-16 right-4 z-20 max-w-sm animate-in fade-in">
-<<<<<<< HEAD
+        <div className="absolute top-16 right-4 z-20 max-w-sm">
           <div className="bg-[#111824]/95 border border-[#FF6B35]/40 text-[#94A3B8] text-xs p-3 rounded-xl shadow-2xl backdrop-blur-md flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 text-[#FF6B35] shrink-0 mt-0.5" />
             <div className="flex-1">
-              <div className="font-medium text-[#FF6B35] text-xs mb-0.5">Planetary Service Notice</div>
+              <div className="font-medium text-[#FF6B35] text-xs mb-0.5">
+                Offline Fallback Active
+              </div>
               <p className="text-[11px] leading-relaxed text-[#94A3B8]">{loadError}</p>
             </div>
             <button
+              type="button"
               onClick={() => setLoadError(null)}
+              aria-label="Dismiss notice"
               className="text-[#94A3B8] hover:text-[#F5F7FA] p-0.5 cursor-pointer"
-=======
-          <div className="bg-[#04121B]/95 border border-[#FF6B35]/40 text-[#A7B8C8] text-xs p-3 rounded-xl shadow-2xl backdrop-blur-md flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 text-[#FF6B35] shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <div className="font-medium text-[#FF6B35] text-xs mb-0.5">Planetary Service Notice</div>
-              <p className="text-[11px] leading-relaxed text-[#71869A]">{loadError}</p>
-            </div>
-            <button
-              onClick={() => setLoadError(null)}
-              className="text-[#71869A] hover:text-[#F4F7FA] p-0.5"
->>>>>>> origin/main
             >
               <X className="w-3.5 h-3.5" />
             </button>

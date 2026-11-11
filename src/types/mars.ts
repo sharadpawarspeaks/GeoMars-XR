@@ -1,8 +1,12 @@
-<<<<<<< HEAD
-export type TabType = 'home' | 'map' | 'terrain' | 'route' | 'science' | 'discover' | 'missions' | 'about';
-=======
-export type TabType = 'map' | 'terrain' | 'missions' | 'science' | 'route';
->>>>>>> origin/main
+export type TabType =
+  | 'home'
+  | 'map'
+  | 'terrain'
+  | 'route'
+  | 'science'
+  | 'discover'
+  | 'missions'
+  | 'about';
 
 export interface MarsCoordinate {
   lat: number;
@@ -10,7 +14,14 @@ export interface MarsCoordinate {
   elevationMeters?: number;
 }
 
-export type SiteCategory = 'rover' | 'lander' | 'volcano' | 'canyon' | 'crater' | 'basin' | 'delta';
+export type SiteCategory =
+  | 'rover'
+  | 'lander'
+  | 'volcano'
+  | 'canyon'
+  | 'crater'
+  | 'basin'
+  | 'delta';
 
 export interface MarsSite {
   id: string;
@@ -27,16 +38,21 @@ export interface MarsSite {
   year?: number;
   geology: string;
   scienceHighlights: string[];
+  interestingFacts?: string[];
+  missionRelevance?: string;
+  sourceAttribution?: string;
   featured?: boolean;
 }
 
 export type LayerCategory = 'imagery' | 'elevation' | 'roughness' | 'scientific';
 export type LayerStatus = 'connected' | 'unavailable' | 'calibrating';
-<<<<<<< HEAD
-export type LayerGroup = 'imagery' | 'topography' | 'thermal' | 'highres' | 'base' | 'scientific';
-=======
-export type LayerGroup = 'base' | 'scientific' | 'highres';
->>>>>>> origin/main
+export type LayerGroup =
+  | 'imagery'
+  | 'topography'
+  | 'thermal'
+  | 'highres'
+  | 'base'
+  | 'scientific';
 
 export interface MapLayerConfig {
   id: string;
@@ -55,10 +71,7 @@ export interface MapLayerConfig {
   unavailableReason?: string;
   opacity?: number;
   legendNotes?: string;
-<<<<<<< HEAD
   texturePath?: string;
-=======
->>>>>>> origin/main
 }
 
 export interface MapOverlaysConfig {
@@ -68,7 +81,6 @@ export interface MapOverlaysConfig {
   plannedRoute: boolean;
 }
 
-<<<<<<< HEAD
 export interface RouteProfilePoint {
   distanceKm: number;
   elevationMeters: number;
@@ -76,6 +88,18 @@ export interface RouteProfilePoint {
   roughnessIndex: number;
   lat: number;
   lng: number;
+}
+
+export interface MarsHazardZone {
+  id: string;
+  name: string;
+  type: 'steep-scarp' | 'aeolian-dunes' | 'crater-rim' | 'boulder-ejecta' | 'thermal-dust';
+  lat: number;
+  lng: number;
+  radiusKm: number;
+  severity: 'Moderate' | 'High' | 'Severe';
+  description: string;
+  isSimulated: true;
 }
 
 export interface CandidateRoute {
@@ -89,8 +113,14 @@ export interface CandidateRoute {
   avgSlopeDeg: number;
   terrainCostScore: number;
   estimatedSolDays: number;
+  estimatedTravelHours: number;
+  routeConfidencePct: number;
+  hazardsAvoided: number;
+  hazardsCrossed: MarsHazardZone[];
   difficulty: 'Low' | 'Moderate' | 'High' | 'Severe';
   profile: RouteProfilePoint[];
+  scienceObjective?: string;
+  isSimulated: true;
 }
 
 export interface RouteConstraintsConfig {
@@ -100,8 +130,6 @@ export interface RouteConstraintsConfig {
   roverProfile: 'perseverance' | 'curiosity' | 'exploration-drone';
 }
 
-=======
->>>>>>> origin/main
 export interface MissionRoutePlan {
   start: MarsSite | MarsCoordinate | null;
   destination: MarsSite | MarsCoordinate | null;
@@ -111,17 +139,18 @@ export interface MissionRoutePlan {
   estimatedSolDays: number;
   difficultyScore: 'Low' | 'Moderate' | 'High' | 'Severe';
   status: 'Idle' | 'Selected' | 'Planning' | 'Verified';
-<<<<<<< HEAD
   activeCandidateRoute?: CandidateRoute;
   alternativeRoutes?: CandidateRoute[];
   constraints?: RouteConstraintsConfig;
+  scienceObjective?: string;
+  missionProgressPct?: number;
 }
 
 export interface LandingSiteCriterion {
   id: string;
   name: string;
   description: string;
-  weight: number; // 0 to 1
+  weight: number;
   idealRange: string;
 }
 
@@ -136,13 +165,13 @@ export interface LandingCandidateEvaluation {
   scienceProximityKm: number;
   coverageResolutionM: number;
   scores: {
-    slopeScore: number; // 0-100
-    elevationScore: number; // 0-100 (atmospheric braking EDL)
-    roughnessScore: number; // 0-100
-    scienceScore: number; // 0-100
-    dataConfidenceScore: number; // 0-100
+    slopeScore: number;
+    elevationScore: number;
+    roughnessScore: number;
+    scienceScore: number;
+    dataConfidenceScore: number;
   };
-  overallSuitability: number; // 0-100 weighted
+  overallSuitability: number;
   verdict: 'Recommended' | 'Conditional' | 'High Risk';
   scientificJustification: string;
   engineeringLimitations: string;
@@ -166,8 +195,7 @@ export interface AiChatMessage {
   timestamp: string;
   citations?: string[];
   suggestedQuestions?: string[];
-=======
->>>>>>> origin/main
+  mode?: 'verified-corpus' | 'server-ai';
 }
 
 export interface TelemetryState {

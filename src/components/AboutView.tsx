@@ -26,23 +26,24 @@ export const AboutView: FC<AboutViewProps> = ({ onNavigate }) => {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,107,53,0.12),transparent_60%)] pointer-events-none" />
         
         <div className="max-w-5xl mx-auto relative z-10 flex flex-col gap-4">
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-[#FF6B35]/20 text-[#FF6B35] border border-[#FF6B35]/40 font-mono">
-              NASA Space Apps Challenge 2026
+              Meta VR Start Developer Competition 2026
             </span>
             <span className="text-xs text-[#94A3B8] font-mono">
-              Challenge Topic: Interplanetary Survival Guide: Martian Map
+              Immersive Web SDK (IWSDK) · Seated Hands-First WebXR Simulator
             </span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-[#F5F7FA] font-['Outfit',sans-serif]">
-            About <span className="text-[#FF6B35]">GeoMars</span>
+            About <span className="text-[#FF6B35]">GeoMars XR</span>
           </h1>
 
           <p className="text-base sm:text-lg text-[#94A3B8] max-w-3xl leading-relaxed">
-            An advanced geospatial exploration platform designed to synthesize multi-mission remote sensing data, 
-            evaluate planetary terrain risks, plan safe surface traverses, and provide decision support for future 
-            robotic and human missions on the Red Planet.
+            GeoMars XR transforms multi-mission NASA/USGS/ESA planetary datasets into a seated, hands-first
+            3D WebXR and desktop exploration simulator—combining an interactive Martian globe, orbit-to-surface
+            terrain dioramas, deterministic A* rover route planning, an interactive science lab, and a grounded
+            scientific assistant.
           </p>
 
           <div className="flex flex-wrap gap-3 pt-2">

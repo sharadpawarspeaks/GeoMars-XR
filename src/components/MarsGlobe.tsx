@@ -1,891 +1,505 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import type { FC } from 'react';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-
-import type { MapLayerConfig, MarsCoordinate, MarsSite, MissionRoutePlan, MapOverlaysConfig } from '../types/mars';
+import { useEffect, useRef, useState } from 'react';
+import type {
+  MapLayerConfig,
+  MarsCoordinate,
+  MarsSite,
+  MissionRoutePlan
+} from '../types/mars';
 import { MARS_SITES } from '../data/marsSites';
-import { formatElevation } from '../utils/marsMath';
+import { LAYER_CATALOG } from '../data/layerCatalog';
+import { formatElevation, formatMarsCoordinate } from '../utils/marsMath';
+import { GeoMarsXRRuntime, type XRPanelMode } from '../xr/GeoMarsXRRuntime';
 import {
+  Glasses,
+  Hand,
+  HelpCircle,
+  Compass,
+  Layers,
+  Mountain,
+  Navigation,
+  FlaskConical,
+  Sparkles,
+  RotateCw,
+  Pause,
   ZoomIn,
   ZoomOut,
-  Crosshair,
-  Layers,
-  ChevronDown,
-  ChevronRight
+  LocateFixed,
+  PanelLeft,
+  AlertTriangle
 } from 'lucide-react';
 
 interface MarsGlobeProps {
   activeLayer: MapLayerConfig;
-  selectedCoordinate: MarsCoordinate | null;
-  selectedSite: MarsSite | null;
-  missionRoute: MissionRoutePlan;
-  overlays: MapOverlaysConfig;
   layerOpacity: number;
-  viewMode: '2d' | '3d';
-  onChangeViewMode: (mode: '2d' | '3d') => void;
-  onSelectCoordinate: (coord: MarsCoordinate) => void;
+  selectedSite: MarsSite | null;
+  selectedCoordinate: MarsCoordinate | null;
   onSelectSite: (site: MarsSite | null) => void;
-  onLoadingChange: (loading: boolean) => void;
+  onSelectCoordinate: (coord: MarsCoordinate) => void;
+  onSelectLayer: (layer: MapLayerConfig) => void;
+  missionRoute: MissionRoutePlan;
+  showRouteOverlay: boolean;
+  onToggleRouteOverlay: (visible: boolean) => void;
+  onUpdateMissionRoute: (plan: MissionRoutePlan) => void;
+  onOpenAiModal: () => void;
+  onToggleViewMode: (mode: '2d' | '3d') => void;
 }
 
-// Convert Martian Latitude & Longitude to 3D Cartesian coordinates on sphere
-function latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector3 {
-  const phi = (lat * Math.PI) / 180;
-  const theta = (lng * Math.PI) / 180;
+const QUICK_KEY_SITE_IDS = [
+  'jezero-crater',
+  'olympus-mons',
+  'valles-marineris',
+  'gale-crater',
+  'elysium-planitia',
+  'nili-fossae',
+  'mawrth-vallis'
+];
 
-  const x = radius * Math.cos(phi) * Math.cos(theta);
-  const y = radius * Math.sin(phi);
-  const z = -radius * Math.cos(phi) * Math.sin(theta);
-
-  return new THREE.Vector3(x, y, z);
-}
-
-// Convert 3D Cartesian coordinate on sphere back to Martian Latitude & Longitude
-function vector3ToLatLng(v: THREE.Vector3): { lat: number; lng: number } {
-  const norm = v.clone().normalize();
-  const lat = Math.asin(Math.max(-1, Math.min(1, norm.y))) * (180 / Math.PI);
-  const lng = Math.atan2(-norm.z, norm.x) * (180 / Math.PI);
-  return { lat, lng };
-}
-
-// Custom Atmosphere Rim Glow Shader
-const AtmosphereShader = {
-  vertexShader: `
-    varying vec3 vNormal;
-    varying vec3 vPosition;
-    void main() {
-      vNormal = normalize(normalMatrix * normal);
-      vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    varying vec3 vNormal;
-    varying vec3 vPosition;
-    void main() {
-      vec3 viewDir = normalize(-vPosition);
-      float fresnel = pow(1.0 - max(0.0, dot(vNormal, viewDir)), 2.8);
-      vec3 atmosphereColor = vec3(1.0, 0.42, 0.18); // Martian amber/orange glow
-      gl_FragColor = vec4(atmosphereColor, fresnel * 0.9);
-    }
-  `
-};
-
-export const MarsGlobe: FC<MarsGlobeProps> = ({
+export function MarsGlobe({
   activeLayer,
-  selectedCoordinate,
-  selectedSite,
-  missionRoute,
-  overlays,
   layerOpacity,
-  viewMode,
-  onChangeViewMode,
-  onSelectCoordinate,
+  selectedSite,
+  selectedCoordinate,
   onSelectSite,
-  onLoadingChange
-}) => {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const controlsRef = useRef<OrbitControls | null>(null);
-  const marsMeshRef = useRef<THREE.Mesh | null>(null);
-  const globeGroupRef = useRef<THREE.Group | null>(null);
-  const routeLineRef = useRef<THREE.Line | null>(null);
-  const targetRingRef = useRef<THREE.Mesh | null>(null);
+  onSelectCoordinate,
+  onSelectLayer,
+  missionRoute,
+  showRouteOverlay,
+  onToggleRouteOverlay,
+  onUpdateMissionRoute,
+  onOpenAiModal,
+  onToggleViewMode
+}: MarsGlobeProps) {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const runtimeRef = useRef<GeoMarsXRRuntime | null>(null);
 
-  const [isAutoRotating, setIsAutoRotating] = useState<boolean>(true);
-  const [hoveredCoordinate, setHoveredCoordinate] = useState<MarsCoordinate | null>(null);
-  const [isMarsDropdownOpen, setIsMarsDropdownOpen] = useState(false);
-  const [labels, setLabels] = useState<
-    { site: MarsSite; screenX: number; screenY: number; visible: boolean; isSelected: boolean }[]
-  >([]);
+  const [xrMode, setXrMode] = useState<XRPanelMode>('globe');
+  const [isAutoRotating, setIsAutoRotating] = useState(true);
+  const [showSpatialPanelsDesktop, setShowSpatialPanelsDesktop] = useState(false);
+  const [showControlsHelp, setShowControlsHelp] = useState(false);
 
-  const GLOBE_RADIUS = 2.5;
+  const [xrState, setXrState] = useState<{
+    xrSupported: boolean;
+    handTrackingLikely: boolean;
+    isInVR: boolean;
+    isOfflineFallback: boolean;
+    xrStatusMessage: string;
+    hoveredSite: MarsSite | null;
+    hoveredCoord: MarsCoordinate | null;
+    roverProgressPct: number;
+  }>({
+    xrSupported: false,
+    handTrackingLikely: false,
+    isInVR: false,
+    isOfflineFallback: false,
+    xrStatusMessage: 'Initializing GeoMars XR Engine...',
+    hoveredSite: null,
+    hoveredCoord: null,
+    roverProgressPct: 0
+  });
 
-  const currentTexturePath = useMemo(() => {
-    switch (activeLayer.id) {
-      case 'elevation-mola':
-        return '/textures/mars_mola_color.jpg';
-      case 'hillshade-mola':
-        return '/textures/mars_hillshade.jpg';
-      case 'themis-day':
-        return '/textures/mars_themis_day.jpg';
-      case 'themis-night':
-        return '/textures/mars_themis_night.jpg';
-      case 'false-color-mineral':
-        return '/textures/mars_false_color.jpg';
-<<<<<<< HEAD
-      case 'slope-map':
-      case 'terrain-roughness':
-        return '/textures/mars_roughness.jpg';
-      case 'regional-imagery':
-=======
-      case 'terrain-roughness':
-        return '/textures/mars_roughness.jpg';
->>>>>>> origin/main
-      case 'ctx-mosaic':
-        return '/textures/mars_ctx.jpg';
-      case 'hirise-regional':
-        return '/textures/mars_hirise.jpg';
-      case 'visual-imagery':
-      default:
-        return '/textures/mars_surface_2k.jpg';
-    }
-  }, [activeLayer.id]);
+  // Latest callbacks ref to avoid recreating WebXR World on React re-renders
+  const callbacksRef = useRef({
+    onSelectSite,
+    onSelectCoordinate,
+    onSelectLayer,
+    onToggleRouteOverlay,
+    onUpdateMissionRoute,
+    onOpenAiModal
+  });
+  callbacksRef.current = {
+    onSelectSite,
+    onSelectCoordinate,
+    onSelectLayer,
+    onToggleRouteOverlay,
+    onUpdateMissionRoute,
+    onOpenAiModal
+  };
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const container = containerRef.current;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    const container = mountRef.current;
+    if (!container) return;
 
-    const scene = new THREE.Scene();
-    sceneRef.current = scene;
-<<<<<<< HEAD
-    scene.background = new THREE.Color(0x080b12);
-=======
-    scene.background = new THREE.Color(0x020a10);
->>>>>>> origin/main
-
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    // Position to frame Mars matching the reference perspective
-    camera.position.set(-0.8, 0.9, 5.8);
-    cameraRef.current = camera;
-
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: 'high-performance'
-    });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
-    container.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.minDistance = 2.8;
-    controls.maxDistance = 14.0;
-    controls.rotateSpeed = 0.6;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.35;
-    controlsRef.current = controls;
-
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
-    scene.add(ambientLight);
-
-    const sunLight = new THREE.DirectionalLight(0xfff5ea, 1.8);
-    sunLight.position.set(6, 3, 5);
-    scene.add(sunLight);
-
-    const rimLight = new THREE.DirectionalLight(0xe06030, 0.45);
-    rimLight.position.set(-6, -2, -5);
-    scene.add(rimLight);
-
-    // Deep Space Starfield
-    const starCount = 2000;
-    const starGeometry = new THREE.BufferGeometry();
-    const starPositions = new Float32Array(starCount * 3);
-    const starColors = new Float32Array(starCount * 3);
-
-    for (let i = 0; i < starCount; i++) {
-      const r = 250 + Math.random() * 200;
-      const theta = 2 * Math.PI * Math.random();
-      const phi = Math.acos(2 * Math.random() - 1);
-
-      starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      starPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-      starPositions[i * 3 + 2] = r * Math.cos(phi);
-
-      const colorVariance = 0.8 + Math.random() * 0.2;
-      const tint = Math.random();
-      if (tint > 0.8) {
-        starColors[i * 3] = 1.0;
-        starColors[i * 3 + 1] = 0.85;
-        starColors[i * 3 + 2] = 0.75;
-      } else {
-        starColors[i * 3] = colorVariance;
-        starColors[i * 3 + 1] = colorVariance;
-        starColors[i * 3 + 2] = 1.0;
-      }
-    }
-
-    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
-
-    const starMaterial = new THREE.PointsMaterial({
-      size: 1.2,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.85
-    });
-    const starfield = new THREE.Points(starGeometry, starMaterial);
-    scene.add(starfield);
-
-    const globeGroup = new THREE.Group();
-    scene.add(globeGroup);
-    globeGroupRef.current = globeGroup;
-
-    const sphereGeometry = new THREE.SphereGeometry(GLOBE_RADIUS, 64, 64);
-    const textureLoader = new THREE.TextureLoader();
-    onLoadingChange(true);
-
-    const marsTexture = textureLoader.load(
-      currentTexturePath,
-      () => {
-        onLoadingChange(false);
+    const runtime = new GeoMarsXRRuntime(
+      container,
+      {
+        activeLayer,
+        layerOpacity,
+        selectedSite,
+        selectedCoordinate,
+        missionRoute,
+        showRouteOverlay,
+        mode: xrMode,
+        showSpatialPanelsDesktop
       },
-      undefined,
-      () => onLoadingChange(false)
+      {
+        onSelectSite: (site) => callbacksRef.current.onSelectSite(site),
+        onSelectCoordinate: (coord) => callbacksRef.current.onSelectCoordinate(coord),
+        onSelectLayer: (layer) => callbacksRef.current.onSelectLayer(layer),
+        onToggleRouteOverlay: (v) => callbacksRef.current.onToggleRouteOverlay(v),
+        onUpdateMissionRoute: (plan) => callbacksRef.current.onUpdateMissionRoute(plan),
+        onOpenAiModal: () => callbacksRef.current.onOpenAiModal(),
+        onModeChange: (next) => setXrMode(next),
+        onXrStateChange: (nextState) => setXrState(nextState)
+      }
     );
 
-    const marsMaterial = new THREE.MeshStandardMaterial({
-      map: marsTexture,
-      roughness: 0.85,
-      metalness: 0.05,
-      transparent: true,
-<<<<<<< HEAD
-      opacity: Math.max(0.1, Math.min(1, layerOpacity / 100))
-=======
-      opacity: layerOpacity
->>>>>>> origin/main
-    });
-
-    const marsMesh = new THREE.Mesh(sphereGeometry, marsMaterial);
-    globeGroup.add(marsMesh);
-    marsMeshRef.current = marsMesh;
-
-    // Atmospheric Glow Halo (Fresnel Corona)
-    const atmosphereGeometry = new THREE.SphereGeometry(GLOBE_RADIUS * 1.025, 64, 64);
-    const atmosphereMaterial = new THREE.ShaderMaterial({
-      vertexShader: AtmosphereShader.vertexShader,
-      fragmentShader: AtmosphereShader.fragmentShader,
-      blending: THREE.AdditiveBlending,
-      transparent: true,
-      side: THREE.BackSide,
-      depthWrite: false
-    });
-    const atmosphereMesh = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
-    scene.add(atmosphereMesh);
-
-    // Selected Target Ring Marker
-    const ringGeometry = new THREE.RingGeometry(0.04, 0.07, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0x338bff,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.95
-    });
-    const targetRing = new THREE.Mesh(ringGeometry, ringMaterial);
-    targetRing.visible = false;
-    globeGroup.add(targetRing);
-    targetRingRef.current = targetRing;
-
-    const handleResize = () => {
-      if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
-      const w = containerRef.current.clientWidth;
-      const h = containerRef.current.clientHeight;
-      cameraRef.current.aspect = w / h;
-      cameraRef.current.updateProjectionMatrix();
-      rendererRef.current.setSize(w, h);
-    };
-    window.addEventListener('resize', handleResize);
-
-    let animationFrameId: number;
-    const animate = () => {
-      animationFrameId = requestAnimationFrame(animate);
-      controls.update();
-
-      atmosphereMesh.position.copy(globeGroup.position);
-
-      renderer.render(scene, camera);
-
-      if (cameraRef.current && containerRef.current) {
-        const cam = cameraRef.current;
-        const w = containerRef.current.clientWidth;
-        const h = containerRef.current.clientHeight;
-
-        const updatedLabels = MARS_SITES.map((site) => {
-          // Check overlay visibility filter
-          if (site.category === 'rover' && !overlays.roverLandingSites) return null;
-          if (site.category === 'lander' && !overlays.missionLocations) return null;
-          if ((site.category === 'volcano' || site.category === 'canyon' || site.category === 'basin') && !overlays.pointsOfInterest) {
-<<<<<<< HEAD
-            return null;
-=======
-            if (site.id !== 'olympus-mons' && site.id !== 'valles-marineris') return null;
->>>>>>> origin/main
-          }
-
-          const worldPos = latLngToVector3(site.lat, site.lng, GLOBE_RADIUS);
-          worldPos.applyMatrix4(globeGroup.matrixWorld);
-
-          const surfaceNormal = worldPos.clone().normalize();
-          const camToPoint = cam.position.clone().sub(worldPos).normalize();
-          const isFacingCamera = surfaceNormal.dot(camToPoint) > 0.08;
-
-          const screenPos = worldPos.clone().project(cam);
-          const screenX = ((screenPos.x + 1) * w) / 2;
-          const screenY = ((-screenPos.y + 1) * h) / 2;
-
-          return {
-            site,
-            screenX,
-            screenY,
-            visible: isFacingCamera && screenPos.z < 1,
-            isSelected: selectedSite?.id === site.id
-          };
-        }).filter(Boolean) as { site: MarsSite; screenX: number; screenY: number; visible: boolean; isSelected: boolean }[];
-
-        setLabels(updatedLabels);
-      }
-    };
-    animate();
+    runtimeRef.current = runtime;
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
-      window.removeEventListener('resize', handleResize);
-      controls.dispose();
-      renderer.dispose();
-      if (renderer.domElement && renderer.domElement.parentNode) {
-        renderer.domElement.parentNode.removeChild(renderer.domElement);
-      }
+      runtime.destroy();
+      runtimeRef.current = null;
     };
+    // Mount once per lifetime of 3D observatory
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update texture & opacity dynamically
+  // Push prop updates into live IWSDK XR runtime
   useEffect(() => {
-    if (!marsMeshRef.current) return;
-    const mat = marsMeshRef.current.material as THREE.MeshStandardMaterial;
-<<<<<<< HEAD
-    mat.opacity = Math.max(0.1, Math.min(1, layerOpacity / 100));
-=======
-    mat.opacity = layerOpacity;
->>>>>>> origin/main
+    runtimeRef.current?.updateProps({
+      activeLayer,
+      layerOpacity,
+      selectedSite,
+      selectedCoordinate,
+      missionRoute,
+      showRouteOverlay,
+      mode: xrMode,
+      showSpatialPanelsDesktop
+    });
+  }, [
+    activeLayer,
+    layerOpacity,
+    selectedSite,
+    selectedCoordinate,
+    missionRoute,
+    showRouteOverlay,
+    xrMode,
+    showSpatialPanelsDesktop
+  ]);
 
-    const loader = new THREE.TextureLoader();
-    onLoadingChange(true);
+  // Accessible desktop keyboard navigation (1-7 landmarks, T terrain, R reset, Space rotate, L cycle layer)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
 
-    loader.load(
-      currentTexturePath,
-      (newTexture) => {
-        if (marsMeshRef.current) {
-          mat.map = newTexture;
-          mat.needsUpdate = true;
+      if (e.key >= '1' && e.key <= '7') {
+        const idx = Number(e.key) - 1;
+        const site = MARS_SITES.find((s) => s.id === QUICK_KEY_SITE_IDS[idx]);
+        if (site) {
+          callbacksRef.current.onSelectSite(site);
+          callbacksRef.current.onSelectCoordinate({
+            lat: site.lat,
+            lng: site.lng,
+            elevationMeters: site.elevationMeters
+          });
+          runtimeRef.current?.flyToSite(site);
         }
-        onLoadingChange(false);
-      },
-      undefined,
-      () => onLoadingChange(false)
-    );
-  }, [currentTexturePath, layerOpacity, onLoadingChange]);
-
-  useEffect(() => {
-    if (controlsRef.current) {
-      controlsRef.current.autoRotate = isAutoRotating;
-    }
-  }, [isAutoRotating]);
-
-  // Fly to coordinate
-  const flyToCoordinate = useCallback((lat: number, lng: number) => {
-    if (!cameraRef.current || !controlsRef.current) return;
-    const controls = controlsRef.current;
-    const camera = cameraRef.current;
-
-    const targetPos = latLngToVector3(lat, lng, GLOBE_RADIUS);
-    const targetCamDist = Math.max(3.6, Math.min(camera.position.length(), 5.5));
-    const targetCamPos = targetPos.clone().normalize().multiplyScalar(targetCamDist);
-
-    const startPos = camera.position.clone();
-    let progress = 0;
-
-    setIsAutoRotating(false);
-
-    const step = () => {
-      progress += 0.045;
-      if (progress < 1) {
-        camera.position.lerpVectors(startPos, targetCamPos, progress);
-        controls.target.set(0, 0, 0);
-        controls.update();
-        requestAnimationFrame(step);
-      } else {
-        camera.position.copy(targetCamPos);
-        controls.target.set(0, 0, 0);
-        controls.update();
+      } else if (e.key === 'r' || e.key === 'R') {
+        runtimeRef.current?.resetView();
+        setIsAutoRotating(true);
+      } else if (e.key === 't' || e.key === 'T') {
+        setXrMode((prev) => (prev === 'terrain' ? 'globe' : 'terrain'));
+      } else if (e.key === 'l' || e.key === 'L') {
+        const curIdx = LAYER_CATALOG.findIndex((l) => l.id === activeLayer.id);
+        const nextLayer = LAYER_CATALOG[(curIdx + 1) % LAYER_CATALOG.length];
+        if (nextLayer) {
+          callbacksRef.current.onSelectLayer(nextLayer);
+        }
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        setIsAutoRotating((prev) => {
+          const next = !prev;
+          runtimeRef.current?.setAutoRotate(next);
+          return next;
+        });
+      } else if (e.key === '+' || e.key === '=') {
+        runtimeRef.current?.zoomStep(1.18);
+      } else if (e.key === '-') {
+        runtimeRef.current?.zoomStep(0.84);
       }
     };
-    requestAnimationFrame(step);
-  }, []);
 
-  useEffect(() => {
-    if (selectedSite) {
-      flyToCoordinate(selectedSite.lat, selectedSite.lng);
-    }
-  }, [selectedSite, flyToCoordinate]);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeLayer.id]);
 
-  // Update Target Ring
-  useEffect(() => {
-    if (!targetRingRef.current) return;
-    const ring = targetRingRef.current;
-
-    const activePoint = selectedCoordinate || (selectedSite ? { lat: selectedSite.lat, lng: selectedSite.lng } : null);
-
-    if (activePoint) {
-      const pos = latLngToVector3(activePoint.lat, activePoint.lng, GLOBE_RADIUS * 1.002);
-      ring.position.copy(pos);
-      ring.lookAt(pos.clone().multiplyScalar(2));
-      ring.visible = true;
-    } else {
-      ring.visible = false;
-    }
-  }, [selectedCoordinate, selectedSite]);
-
-  // Geodesic Trajectory Arc
-  useEffect(() => {
-    if (!globeGroupRef.current || !sceneRef.current) return;
-    const globe = globeGroupRef.current;
-
-    if (routeLineRef.current) {
-      globe.remove(routeLineRef.current);
-      routeLineRef.current.geometry.dispose();
-      (routeLineRef.current.material as THREE.Material).dispose();
-      routeLineRef.current = null;
-    }
-
-    if (overlays.plannedRoute && missionRoute.start && missionRoute.destination) {
-      const startLat = 'lat' in missionRoute.start ? missionRoute.start.lat : 0;
-      const startLng = 'lng' in missionRoute.start ? missionRoute.start.lng : 0;
-      const destLat = 'lat' in missionRoute.destination ? missionRoute.destination.lat : 0;
-      const destLng = 'lng' in missionRoute.destination ? missionRoute.destination.lng : 0;
-
-      const pA = latLngToVector3(startLat, startLng, GLOBE_RADIUS).normalize();
-      const pB = latLngToVector3(destLat, destLng, GLOBE_RADIUS).normalize();
-
-      const numPoints = 64;
-      const arcPoints: THREE.Vector3[] = [];
-
-      for (let i = 0; i <= numPoints; i++) {
-        const t = i / numPoints;
-        const pt = new THREE.Vector3();
-        pt.copy(pA).lerp(pB, t).normalize();
-
-        const elevation = GLOBE_RADIUS * (1.008 + 0.045 * Math.sin(t * Math.PI));
-        pt.multiplyScalar(elevation);
-        arcPoints.push(pt);
-      }
-
-      const curveGeometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
-      const curveMaterial = new THREE.LineBasicMaterial({
-        color: 0xff6b35,
-        linewidth: 3,
-        transparent: true,
-        opacity: 0.95
-      });
-
-      const line = new THREE.Line(curveGeometry, curveMaterial);
-      globe.add(line);
-      routeLineRef.current = line;
-    }
-  }, [overlays.plannedRoute, missionRoute]);
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    const container = containerRef.current;
-    const camera = cameraRef.current;
-    const marsMesh = marsMeshRef.current;
-    if (!container || !camera || !marsMesh) return;
-
-    const rect = container.getBoundingClientRect();
-    const mouse = new THREE.Vector2(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1
-    );
-
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(mouse, camera);
-
-    const intersects = raycaster.intersectObject(marsMesh);
-    if (intersects.length > 0) {
-      const hitPoint = intersects[0].point;
-      const localPoint = hitPoint.clone();
-      if (globeGroupRef.current) {
-        localPoint.applyMatrix4(globeGroupRef.current.matrixWorld.clone().invert());
-      }
-      const coords = vector3ToLatLng(localPoint);
-      setHoveredCoordinate(coords);
-
-      let nearestSite: MarsSite | null = null;
-      let minDistance = 0.35;
-
-      MARS_SITES.forEach((site) => {
-        const sitePos = latLngToVector3(site.lat, site.lng, GLOBE_RADIUS);
-        const dist = sitePos.distanceTo(localPoint);
-        if (dist < minDistance) {
-          minDistance = dist;
-          nearestSite = site;
-        }
-      });
-
-      if (nearestSite) {
-        onSelectSite(nearestSite);
-        onSelectCoordinate({
-          lat: (nearestSite as MarsSite).lat,
-          lng: (nearestSite as MarsSite).lng,
-          elevationMeters: (nearestSite as MarsSite).elevationMeters
-        });
-      } else {
-        onSelectSite(null);
-        onSelectCoordinate({
-          lat: parseFloat(coords.lat.toFixed(2)),
-          lng: parseFloat(coords.lng.toFixed(2))
-        });
-      }
+  const handleModeSelect = (nextMode: XRPanelMode) => {
+    setXrMode(nextMode);
+    runtimeRef.current?.setMode(nextMode);
+    if (nextMode === 'ai') {
+      onOpenAiModal();
     }
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const container = containerRef.current;
-    const camera = cameraRef.current;
-    const marsMesh = marsMeshRef.current;
-    if (!container || !camera || !marsMesh) return;
+  const activeRoute =
+    missionRoute.activeCandidateRoute ?? missionRoute.alternativeRoutes?.[0];
 
-    const rect = container.getBoundingClientRect();
-    const mouse = new THREE.Vector2(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1
-    );
-
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(mouse, camera);
-
-    const intersects = raycaster.intersectObject(marsMesh);
-    if (intersects.length > 0) {
-      const hitPoint = intersects[0].point;
-      const localPoint = hitPoint.clone();
-      if (globeGroupRef.current) {
-        localPoint.applyMatrix4(globeGroupRef.current.matrixWorld.clone().invert());
-      }
-      const coords = vector3ToLatLng(localPoint);
-      setHoveredCoordinate(coords);
-    }
-  };
-
-  const activeLat = hoveredCoordinate?.lat ?? selectedCoordinate?.lat ?? (selectedSite ? selectedSite.lat : 18.44);
-  const activeLng = hoveredCoordinate?.lng ?? selectedCoordinate?.lng ?? (selectedSite ? selectedSite.lng : 77.45);
-  const activeElev = selectedCoordinate?.elevationMeters ?? (selectedSite ? selectedSite.elevationMeters : -2536);
+  const telemetryCoord = xrState.hoveredCoord ?? selectedCoordinate;
 
   return (
-    <div
-      ref={containerRef}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-<<<<<<< HEAD
-      className="relative w-full h-full bg-[#080B12] overflow-hidden select-none cursor-grab active:cursor-grabbing"
-=======
-      className="relative w-full h-full bg-[#020A10] overflow-hidden select-none cursor-grab active:cursor-grabbing"
->>>>>>> origin/main
-    >
-      {/* 1. Upper-Left: Compact Planet Selector (Mars ▾) */}
-      <div className="absolute top-4 left-4 z-10 pointer-events-auto">
-        <div className="relative">
-          <button
-            onClick={() => setIsMarsDropdownOpen(!isMarsDropdownOpen)}
-<<<<<<< HEAD
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#111824]/90 border border-[#273244] hover:border-[#FF6B35]/50 shadow-xl backdrop-blur-md transition-all text-xs cursor-pointer"
-          >
-            <img src="/geomars-logo.png" alt="Mars" className="w-4 h-4 object-contain shrink-0" />
-            <span className="font-bold text-[#F5F7FA]">Mars</span>
-            <ChevronDown className="w-3 h-3 text-[#94A3B8]" />
-          </button>
+    <div className="relative w-full h-full bg-[#03060D] select-none overflow-hidden">
+      {/* WebGL / IWSDK XR Viewport */}
+      <div
+        ref={mountRef}
+        className="w-full h-full cursor-grab active:cursor-grabbing"
+        aria-label="GeoMars XR Interactive 3D Mars Viewport"
+      />
 
-          {isMarsDropdownOpen && (
-            <div className="absolute top-9 left-0 bg-[#111824] border border-[#273244] rounded-xl shadow-2xl p-1 z-30 min-w-[130px] text-xs">
-              <div className="px-2.5 py-1.5 text-[11px] font-semibold text-[#FF6B35] bg-[#0D121C] rounded-lg">
-                Mars (Selected)
-              </div>
-              <div className="px-2.5 py-1.5 text-[11px] text-[#94A3B8] cursor-not-allowed">
-                Phobos (Planned)
-              </div>
-              <div className="px-2.5 py-1.5 text-[11px] text-[#94A3B8] cursor-not-allowed">
-=======
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#04121B]/90 border border-[#19303E] hover:border-[#FF6B35]/50 shadow-xl backdrop-blur-md transition-all text-xs"
-          >
-            <img src="/geomars-logo.png" alt="Mars" className="w-4 h-4 object-contain shrink-0" />
-            <span className="font-bold text-[#F4F7FA]">Mars</span>
-            <ChevronDown className="w-3 h-3 text-[#71869A]" />
-          </button>
-
-          {isMarsDropdownOpen && (
-            <div className="absolute top-9 left-0 bg-[#04121B] border border-[#19303E] rounded-xl shadow-2xl p-1 z-30 min-w-[130px] text-xs">
-              <div className="px-2.5 py-1.5 text-[11px] font-semibold text-[#FF6B35] bg-[#0B1C29] rounded-lg">
-                Mars (Selected)
-              </div>
-              <div className="px-2.5 py-1.5 text-[11px] text-[#71869A] cursor-not-allowed">
-                Phobos (Planned)
-              </div>
-              <div className="px-2.5 py-1.5 text-[11px] text-[#71869A] cursor-not-allowed">
->>>>>>> origin/main
-                Deimos (Planned)
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 2. Upper-Right: Segmented View Selector [ 2D | 3D ] */}
-      <div className="absolute top-4 right-4 z-10 pointer-events-auto">
-<<<<<<< HEAD
-        <div className="flex items-center gap-1 bg-[#111824]/90 border border-[#273244] p-1 rounded-xl shadow-xl backdrop-blur-md">
+      {/* Top Left Controls: Planet View Switcher & XR Mode Selector */}
+      <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-2 max-w-[calc(100%-24px)] pointer-events-none">
+        <div className="flex items-center gap-1 bg-slate-950/85 backdrop-blur-md border border-slate-700/80 rounded-lg p-1 pointer-events-auto shadow-lg">
           <button
-            onClick={() => onChangeViewMode('2d')}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              viewMode === '2d'
-                ? 'bg-[#FF6B35] text-white shadow-md'
-                : 'text-[#94A3B8] hover:text-white'
-=======
-        <div className="flex items-center gap-1 bg-[#04121B]/90 border border-[#19303E] p-1 rounded-xl shadow-xl backdrop-blur-md">
-          <button
-            onClick={() => onChangeViewMode('2d')}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-              viewMode === '2d'
-                ? 'bg-[#FF6B35] text-white shadow-md'
-                : 'text-[#A7B8C8] hover:text-white'
->>>>>>> origin/main
-            }`}
+            type="button"
+            onClick={() => onToggleViewMode('2d')}
+            className="px-2.5 py-1 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors flex items-center gap-1.5"
           >
-            2D
+            <Layers className="w-3.5 h-3.5 text-sky-400" />
+            2D Map
           </button>
           <button
-            onClick={() => onChangeViewMode('3d')}
-<<<<<<< HEAD
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              viewMode === '3d'
-                ? 'bg-[#FF6B35] text-white shadow-md'
-                : 'text-[#94A3B8] hover:text-white'
-=======
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-              viewMode === '3d'
-                ? 'bg-[#FF6B35] text-white shadow-md'
-                : 'text-[#A7B8C8] hover:text-white'
->>>>>>> origin/main
-            }`}
+            type="button"
+            onClick={() => onToggleViewMode('3d')}
+            className="px-2.5 py-1 rounded text-xs font-semibold bg-[#FF6B35]/20 text-[#FF8A5C] border border-[#FF6B35]/40 flex items-center gap-1.5"
           >
-            3D
+            <Glasses className="w-3.5 h-3.5" />
+            3D / XR
           </button>
         </div>
-      </div>
 
-      {/* 3. Surface Labels Overlay matching reference image */}
-      <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
-        {labels.map(({ site, screenX, screenY, visible, isSelected }) => {
-          if (!visible) return null;
-
-          return (
-            <div
-              key={site.id}
-              style={{
-                transform: `translate3d(${screenX}px, ${screenY}px, 0)`,
-                transformOrigin: '0 0'
-              }}
-              className="absolute left-0 top-0 pointer-events-auto -translate-x-1/2 -translate-y-1/2 group"
-            >
-              {/* Target Marker Pin */}
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectSite(site);
-                  onSelectCoordinate({
-                    lat: site.lat,
-                    lng: site.lng,
-                    elevationMeters: site.elevationMeters
-                  });
-                }}
-                className={`relative flex items-center justify-center cursor-pointer transition-transform ${
-                  isSelected ? 'scale-110' : 'hover:scale-105'
+        {/* Observatory Mode Tabs (Seated 10-minute exploration flow) */}
+        <div
+          role="tablist"
+          aria-label="XR Observatory Mode"
+          className="flex items-center gap-1 bg-slate-950/85 backdrop-blur-md border border-slate-700/80 rounded-lg p-1 pointer-events-auto shadow-lg"
+        >
+          {(
+            [
+              { id: 'globe', label: 'Globe', icon: Compass },
+              { id: 'terrain', label: 'Surface 3D', icon: Mountain },
+              { id: 'rover', label: 'Rover Ops', icon: Navigation },
+              { id: 'science', label: 'Science Lab', icon: FlaskConical },
+              { id: 'ai', label: 'AI Assist', icon: Sparkles }
+            ] as const
+          ).map(({ id, label, icon: Icon }) => {
+            const active = xrMode === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => handleModeSelect(id)}
+                className={`px-2.5 py-1 rounded text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                  active
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-400/40'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 border border-transparent'
                 }`}
               >
-                {/* Pin Circle */}
-                <div
-                  className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
-                    isSelected
-                      ? 'border-[#338BFF] bg-[#338BFF]/30 shadow-[0_0_12px_rgba(51,139,255,0.8)]'
-                      : 'border-white/60 bg-black/40 hover:border-white hover:bg-white/20'
-                  }`}
-                >
-                  <div
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      site.category === 'rover'
-                        ? 'bg-[#338BFF]'
-                        : site.category === 'volcano'
-                        ? 'bg-white'
-                        : site.category === 'canyon'
-                        ? 'bg-[#A7B8C8]'
-                        : 'bg-[#FF6B35]'
-                    }`}
-                  />
-                </div>
-
-                {/* Callout Label or Selected Card */}
-                {isSelected ? (
-                  <div className="absolute left-7 top-1/2 -translate-y-1/2 bg-[#04121B]/95 border border-[#19303E] rounded-xl px-3 py-1.5 shadow-2xl backdrop-blur-md flex items-center gap-2.5 whitespace-nowrap">
-                    <div className="flex flex-col">
-                      <span className="text-[12px] font-bold text-[#F4F7FA] leading-tight">
-                        {site.name.split(' (')[0]}
-                      </span>
-                      <span className="text-[10px] text-[#A7B8C8]">
-                        {site.mission || (site.category === 'rover' ? 'Perseverance Rover' : 'Landmark')}
-                      </span>
-                    </div>
-                    <ChevronRight className="w-3.5 h-3.5 text-[#71869A]" />
-                  </div>
-                ) : (
-                  <div className="absolute left-6 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap text-[#F4F7FA] text-shadow drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-                    {site.name.split(' (')[0]}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+                <Icon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* 4. Right Vertical Map Controls Toolbar */}
-      <div className="absolute top-1/2 -translate-y-1/2 right-4 z-20 flex flex-col gap-2 pointer-events-auto">
-        <div className="flex flex-col bg-[#04121B]/90 border border-[#19303E] rounded-xl overflow-hidden shadow-2xl backdrop-blur-md">
-          {/* North Indicator */}
-          <button
-            onClick={() => {
-              if (controlsRef.current && cameraRef.current) {
-                cameraRef.current.position.set(-0.8, 0.9, 5.8);
-                controlsRef.current.target.set(0, 0, 0);
-                controlsRef.current.update();
-                setIsAutoRotating(true);
-              }
-            }}
-            title="Reset North Orientation"
-            className="p-2.5 text-[#F4F7FA] hover:bg-[#081925] border-b border-[#19303E] flex items-center justify-center transition-colors"
-          >
-            <div className="flex flex-col items-center">
-              <span className="text-[10px] font-bold text-[#FF6B35] leading-none mb-0.5">N</span>
-              <div className="w-0 h-0 border-x-4 border-x-transparent border-b-6 border-b-[#FF6B35]" />
-            </div>
-          </button>
+      {/* Top Right: Enter WebXR Button + Quick Camera & Cockpit Tools */}
+      <div className="absolute top-3 right-3 z-20 flex flex-wrap items-center justify-end gap-2 pointer-events-none">
+        {/* Primary WebXR Entry Button */}
+        <button
+          type="button"
+          onClick={() =>
+            xrState.isInVR ? void runtimeRef.current?.exitVR() : void runtimeRef.current?.launchVR()
+          }
+          title={xrState.xrStatusMessage}
+          className={`pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold border shadow-lg transition-all ${
+            xrState.isInVR
+              ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/35'
+              : xrState.xrSupported
+                ? 'bg-gradient-to-r from-[#FF6B35] to-[#e05221] text-white border-[#FF8A5C]/70 hover:brightness-110'
+                : 'bg-slate-900/90 text-slate-200 border-slate-600/80 hover:border-[#FF6B35]/60'
+          }`}
+        >
+          <Hand className="w-3.5 h-3.5" />
+          <span>{xrState.isInVR ? 'Exit VR' : 'Enter VR (Hands-First)'}</span>
+        </button>
 
-          {/* Zoom In */}
+        {/* Camera & Spatial Panel Toolbar */}
+        <div className="flex items-center gap-1 bg-slate-950/85 backdrop-blur-md border border-slate-700/80 rounded-lg p-1 pointer-events-auto shadow-lg">
           <button
-            onClick={() => {
-              if (cameraRef.current && controlsRef.current) {
-                cameraRef.current.position.multiplyScalar(0.85);
-                controlsRef.current.update();
-              }
-            }}
-            title="Zoom In"
-            className="p-2.5 text-[#F4F7FA] hover:bg-[#081925] border-b border-[#19303E] transition-colors flex items-center justify-center"
+            type="button"
+            onClick={() => runtimeRef.current?.zoomStep(1.18)}
+            title="Zoom In (+)"
+            aria-label="Zoom In"
+            className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-slate-800/80"
           >
-            <ZoomIn className="w-4 h-4" />
+            <ZoomIn className="w-3.5 h-3.5" />
           </button>
-
-          {/* Zoom Out */}
           <button
-            onClick={() => {
-              if (cameraRef.current && controlsRef.current) {
-                cameraRef.current.position.multiplyScalar(1.15);
-                controlsRef.current.update();
-              }
-            }}
-            title="Zoom Out"
-            className="p-2.5 text-[#F4F7FA] hover:bg-[#081925] border-b border-[#19303E] transition-colors flex items-center justify-center"
+            type="button"
+            onClick={() => runtimeRef.current?.zoomStep(0.84)}
+            title="Zoom Out (-)"
+            aria-label="Zoom Out"
+            className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-slate-800/80"
           >
-            <ZoomOut className="w-4 h-4" />
+            <ZoomOut className="w-3.5 h-3.5" />
           </button>
-
-          {/* Recenter */}
           <button
+            type="button"
             onClick={() => {
-              if (controlsRef.current && cameraRef.current) {
-                cameraRef.current.position.set(-0.8, 0.9, 5.8);
-                controlsRef.current.target.set(0, 0, 0);
-                controlsRef.current.update();
-              }
+              const next = !isAutoRotating;
+              setIsAutoRotating(next);
+              runtimeRef.current?.setAutoRotate(next);
             }}
-            title="Recenter Globe"
-            className="p-2.5 text-[#F4F7FA] hover:bg-[#081925] border-b border-[#19303E] transition-colors flex items-center justify-center"
+            title={isAutoRotating ? 'Pause Orbital Spin (Space)' : 'Resume Orbital Spin (Space)'}
+            aria-label="Toggle orbital rotation"
+            className={`p-1.5 rounded transition-colors ${
+              isAutoRotating
+                ? 'text-[#FF8A5C] bg-[#FF6B35]/15'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+            }`}
           >
-            <Crosshair className="w-4 h-4" />
+            {isAutoRotating ? <Pause className="w-3.5 h-3.5" /> : <RotateCw className="w-3.5 h-3.5" />}
           </button>
-
-          {/* Auto-Rotation Toggle */}
           <button
-            onClick={() => setIsAutoRotating(!isAutoRotating)}
-            title={isAutoRotating ? 'Pause Rotation' : 'Auto-Rotate'}
-            className="p-2.5 text-[#F4F7FA] hover:bg-[#081925] transition-colors flex items-center justify-center"
+            type="button"
+            onClick={() => {
+              runtimeRef.current?.resetView();
+              setIsAutoRotating(true);
+            }}
+            title="Recenter Seated Cockpit & Reset (R)"
+            aria-label="Recenter seated cockpit"
+            className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-slate-800/80"
           >
-            <Layers className="w-4 h-4" />
+            <LocateFixed className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowSpatialPanelsDesktop((v) => !v)}
+            title="Preview 3D Curved XR Spatial Cockpit Panels on Desktop"
+            aria-pressed={showSpatialPanelsDesktop}
+            className={`px-2 py-1 rounded text-[11px] font-medium flex items-center gap-1 transition-colors ${
+              showSpatialPanelsDesktop
+                ? 'bg-sky-500/20 text-sky-300 border border-sky-400/40'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+            }`}
+          >
+            <PanelLeft className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">XR Panels</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowControlsHelp((v) => !v)}
+            title="Hand Tracking & Desktop Controls Guide"
+            aria-expanded={showControlsHelp}
+            className={`p-1.5 rounded transition-colors ${
+              showControlsHelp
+                ? 'bg-amber-500/20 text-amber-300'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+            }`}
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
-<<<<<<< HEAD
-      {/* 5. Lower-Left: Geographic Scale Bar */}
-      <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
-        <div className="bg-[#111824]/85 border border-[#273244] px-3 py-1.5 rounded-lg shadow-lg backdrop-blur-md flex flex-col gap-0.5">
-          <div className="flex justify-between text-[9px] text-[#94A3B8] font-mono w-40">
-=======
-      {/* 5. Lower-Left: Geographic Scale Bar matching reference */}
-      <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
-        <div className="bg-[#04121B]/85 border border-[#19303E] px-3 py-1.5 rounded-lg shadow-lg backdrop-blur-md flex flex-col gap-0.5">
-          <div className="flex justify-between text-[9px] text-[#A7B8C8] font-mono w-40">
->>>>>>> origin/main
-            <span>0</span>
-            <span>500</span>
-            <span>1,000 km</span>
+      {/* Collapsible Controls & Hand Interaction Guide */}
+      {showControlsHelp && (
+        <div className="absolute top-14 right-3 z-30 w-80 bg-slate-950/95 backdrop-blur-md border border-slate-700 rounded-xl p-4 shadow-2xl text-xs text-slate-200 space-y-2.5">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <span className="font-semibold text-white flex items-center gap-1.5">
+              <Hand className="w-3.5 h-3.5 text-[#FF6B35]" />
+              Hands-First XR &amp; Desktop Guide
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowControlsHelp(false)}
+              className="text-slate-400 hover:text-white text-[11px]"
+            >
+              Close
+            </button>
           </div>
-          <div className="w-40 h-1.5 border-b-2 border-l-2 border-r-2 border-[#FF6B35] relative">
-            <div className="absolute left-1/2 top-0 w-0.5 h-1.5 bg-[#FF6B35]" />
+          <div className="space-y-1.5 text-[11px] text-slate-300">
+            <p>
+              <strong className="text-sky-300">WebXR Hand Tracking:</strong> Point ray &amp; pinch
+              thumb+index to select beacons/buttons. Pinch with 1 hand to spin Mars; pinch both
+              hands to zoom scale. Grab top blue bars to move floating panels.
+            </p>
+            <p>
+              <strong className="text-[#FF8A5C]">Desktop Mouse / Touch:</strong> Drag to orbit Mars,
+              scroll to zoom, click any beacon or terrain coordinate to inspect.
+            </p>
+            <p>
+              <strong className="text-emerald-300">Keyboard Shortcuts:</strong>{' '}
+              <code>1–7</code> fly to flagship sites, <code>T</code> surface 3D diorama,{' '}
+              <code>L</code> cycle NASA layer, <code>Space</code> pause spin, <code>R</code> recenter.
+            </p>
           </div>
         </div>
+      )}
+
+      {/* Hover Tooltip Banner when inspecting beacons in 3D */}
+      {xrState.hoveredSite && (
+        <div className="absolute top-14 left-3 z-20 bg-slate-950/90 backdrop-blur-md border border-[#FF6B35]/50 rounded-lg px-3 py-1.5 pointer-events-none shadow-lg">
+          <div className="text-xs font-semibold text-white">{xrState.hoveredSite.name}</div>
+          <div className="text-[11px] text-slate-300 font-mono">
+            {formatMarsCoordinate(xrState.hoveredSite.lat, xrState.hoveredSite.lng)} ·{' '}
+            {formatElevation(xrState.hoveredSite.elevationMeters)}
+          </div>
+        </div>
+      )}
+
+      {/* Active Route Simulation Mini Pill when Route is ON */}
+      {showRouteOverlay && activeRoute && (
+        <div className="hidden sm:flex items-center gap-2.5 absolute bottom-14 left-3 z-20 bg-slate-950/88 backdrop-blur-md border border-emerald-500/40 rounded-lg px-3 py-1.5 text-[11px] text-slate-200 pointer-events-none shadow-lg">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>
+            <strong className="text-emerald-300">Simulated A* Rover:</strong>{' '}
+            {missionRoute.startLabel} → {missionRoute.destinationLabel} ({activeRoute.distanceKm.toFixed(0)} km,{' '}
+            {activeRoute.routeConfidencePct}% simulated confidence — not certified safe)
+          </span>
+        </div>
+      )}
+
+      {/* Bottom Left: Scientific Provenance / Offline Fallback Status */}
+      <div className="absolute bottom-3 left-3 z-20 flex flex-wrap items-center gap-2 pointer-events-none">
+        {xrState.isOfflineFallback ? (
+          <div className="flex items-center gap-1.5 bg-amber-950/90 border border-amber-500/60 text-amber-200 px-2.5 py-1 rounded-md text-[11px] font-medium">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+            <span>Offline Procedural Fallback Active (Not Verified NASA Imagery)</span>
+          </div>
+        ) : (
+          <div className="bg-slate-950/80 backdrop-blur-sm border border-slate-800 px-2.5 py-1 rounded-md text-[11px] text-slate-300">
+            <span className="text-sky-400 font-semibold">{activeLayer.name}</span>
+            <span className="text-slate-500 mx-1.5">·</span>
+            <span className="text-slate-400">{activeLayer.provider} ({activeLayer.resolution})</span>
+          </div>
+        )}
       </div>
 
-<<<<<<< HEAD
-      {/* 6. Lower-Right: Comprehensive Map Information Strip */}
-      <div className="absolute bottom-4 right-4 z-10 pointer-events-none">
-        <div className="bg-[#111824]/90 border border-[#273244] rounded-lg px-3 py-1.5 shadow-xl backdrop-blur-md flex items-center gap-3 font-mono text-[11px] text-[#94A3B8]">
+      {/* Bottom Right: Coordinate Probe Readout */}
+      <div className="absolute bottom-3 right-3 z-20 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-md px-3 py-1.5 text-[11px] font-mono text-slate-200 pointer-events-none shadow-lg">
+        {telemetryCoord ? (
           <span>
-            Coords: <strong className="text-[#F5F7FA]">{activeLat.toFixed(2)}° {activeLat >= 0 ? 'N' : 'S'}, {activeLng.toFixed(2)}° {activeLng >= 0 ? 'E' : 'W'}</strong>
+            {xrState.hoveredCoord ? 'PROBE ' : 'TARGET '}
+            <span className="text-[#FF8A5C]">
+              {formatMarsCoordinate(telemetryCoord.lat, telemetryCoord.lng)}
+            </span>
+            <span className="text-slate-500 mx-1.5">|</span>
+            <span className="text-sky-300">{formatElevation(telemetryCoord.elevationMeters)}</span>
           </span>
-          <span className="text-[#273244]">|</span>
-          <span>
-            Elev: <strong className="text-[#F5F7FA]">{formatElevation(activeElev)}</strong>
-          </span>
-          <span className="text-[#273244]">|</span>
-          <span className="truncate max-w-[180px]">
-            Layer: <strong className="text-[#FF6B35]">{activeLayer.name}</strong>
-          </span>
-          <span className="text-[#273244]">|</span>
-          <span>
-            Mode: <strong className="text-[#F5F7FA]">3D Globe</strong>
-          </span>
-          <span className="text-[#273244]">|</span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#35C98A]" />
-            <strong className="text-[#35C98A]">ONLINE</strong>
-          </span>
-=======
-      {/* 6. Lower-Right: Coordinates Readout Pill matching reference */}
-      <div className="absolute bottom-4 right-4 z-10 pointer-events-none">
-        <div className="bg-[#04121B]/90 border border-[#19303E] rounded-lg px-3 py-1.5 shadow-xl backdrop-blur-md flex items-center gap-3 font-mono text-[11px] text-[#A7B8C8]">
-          <span>Lat: <strong className="text-[#F4F7FA]">{activeLat.toFixed(2)}° {activeLat >= 0 ? 'N' : 'S'}</strong></span>
-          <span className="text-[#19303E]">|</span>
-          <span>Lon: <strong className="text-[#F4F7FA]">{activeLng.toFixed(2)}° {activeLng >= 0 ? 'E' : 'W'}</strong></span>
-          <span className="text-[#19303E]">|</span>
-          <span>Elev: <strong className="text-[#F4F7FA]">{formatElevation(activeElev)}</strong></span>
->>>>>>> origin/main
-        </div>
+        ) : (
+          <span className="text-slate-400">{xrState.xrStatusMessage}</span>
+        )}
       </div>
     </div>
   );
-};
+}
